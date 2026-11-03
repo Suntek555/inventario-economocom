@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#17324d">
+<title>Inventario ECONOCOM</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#17212b;background:#f3f6f8}
+*{box-sizing:border-box}body{margin:0}header{background:#17324d;color:white;padding:18px 16px 16px}
+header h1{font-size:20px;margin:0 0 4px}header p{margin:0;color:#d5e2ee;font-size:13px}
+main{max-width:720px;margin:auto;padding:14px;display:grid;gap:12px}
+.card{background:white;border:1px solid #dce3e8;border-radius:16px;padding:15px;box-shadow:0 2px 8px #1020300a}
+h2{font-size:16px;margin:0 0 10px}.muted{color:#647382;font-size:13px}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button,.filelabel{border:0;border-radius:12px;padding:13px 15px;font-size:15px;font-weight:650;cursor:pointer}
+button:disabled{opacity:.45;cursor:not-allowed}.primary{background:#1769aa;color:white}.secondary,.filelabel{background:#e8eef3;color:#17324d}.yes{background:#18834b;color:white;flex:1}.no{background:#b42318;color:white;flex:1}
+input[type=file]{display:none}input[type=text]{width:100%;padding:12px;border:1px solid #cbd5df;border-radius:10px;font-size:16px}
+video{width:100%;max-height:48vh;object-fit:cover;background:#101820;border-radius:12px}
+.preview{display:none}.status{padding:10px 12px;border-radius:10px;background:#eef3f7;font-size:14px}.status.good{background:#e6f5ec;color:#126238}.status.warn{background:#fff3db;color:#805500}.status.bad{background:#fde9e7;color:#9b1c13}
+.big{font-size:25px;font-weight:800;letter-spacing:.3px;overflow-wrap:anywhere}.data{display:grid;grid-template-columns:1fr 1fr;gap:8px}.data div{background:#f4f7f9;padding:10px;border-radius:10px;min-width:0}.data small{display:block;color:#627181;font-size:11px;text-transform:uppercase}.data strong{overflow-wrap:anywhere}
+.actions{display:flex;gap:10px;margin-top:12px}.hidden{display:none!important}
+progress{width:100%;height:10px;accent-color:#18834b}
+footer{font-size:12px;color:#647382;text-align:center;padding:4px 10px 20px}
+@media(min-width:600px){main{padding:20px}.big{font-size:30px}}
+</style>
+</head>
+<body>
+<header><h1>Inventario ECONOCOM</h1><p>Lector de etiquetas por cámara · OCR · Excel en tu teléfono</p></header>
+<main>
+<section class="card">
+<h2>1. Cargar el Excel de inventario</h2>
+<div class="row">
+<label class="filelabel" for="excelFile">Seleccionar archivo .xlsx</label>
+<input id="excelFile" type="file" accept=".xlsx,.xls">
+<button id="exportBtn" class="secondary" disabled>Exportar Excel actualizado</button>
+</div>
+<div id="fileStatus" class="status" style="margin-top:10px">Carga una copia del Excel para empezar.</div>
+<div class="muted" style="margin-top:8px">El archivo original no se modifica. Al exportar se crea una copia con las filas verificadas en verde y la pestaña ENCONTRADO FUERA STOCK.</div>
+</section>
+
+<section class="card">
+<h2>2. Leer etiqueta</h2>
+<div class="row" style="margin-bottom:10px">
+<button id="startCam" class="primary">Abrir cámara</button>
+<button id="stopCam" class="secondary" disabled>Cerrar cámara</button>
+<label class="filelabel" for="photoFile">Usar foto</label>
+<input id="photoFile" type="file" accept="image/*" capture="environment">
+</div>
+<video id="video" playsinline autoplay class="hidden"></video>
+<canvas id="canvas" class="hidden"></canvas>
+<div class="row" style="margin-top:10px">
+<button id="captureBtn" class="primary" disabled>Capturar y reconocer</button>
+</div>
+<div id="ocrStatus" class="status" style="margin-top:10px">La cámara se abrirá cuando pulses «Abrir cámara».</div>
+ <div class="muted" style="margin-top:8px">La cámara requiere abrir esta aplicación desde una dirección HTTPS. El Excel se procesa y se guarda en el almacenamiento local del navegador de este teléfono.</div>
+</section>
+
+<section class="card">
+<h2>3. Resultado de lectura</h2>
+<div id="emptyResult" class="muted">Todavía no se ha leído ninguna etiqueta.</div>
+<div id="result" class="hidden">
+<label class="muted" for="stockId">STOCK-ID / Nº serie reconocido (puedes corregirlo)</label>
+<input id="stockId" type="text" autocomplete="off" placeholder="Ej. S25003774">
+<div class="data" style="margin-top:10px">
+<div><small>P/N</small><strong id="pnValue">—</strong></div>
+<div><small>Modelo</small><strong id="modelValue">—</strong></div>
+<div><small>Ubicación etiqueta</small><strong id="locValue">—</strong></div>
+<div><small>Coincidencia Excel</small><strong id="matchValue">Pendiente</strong></div>
+</div>
+<div id="matchInfo" class="status" style="margin-top:10px">Revisa el resultado.</div>
+<div class="actions">
+<button id="yesBtn" class="yes" disabled>SÍ · Comprobado</button>
+<button id="noBtn" class="no" disabled>NO · No comprobado</button>
+</div>
+</div>
+</section>
+
+<section class="card">
+<h2>Progreso</h2>
+<div class="row" style="justify-content:space-between"><span>Filas marcadas en verde</span><strong id="countDone">0</strong></div>
+<progress id="progress" value="0" max="1"></progress>
+<div class="muted" id="progressText">Carga el Excel para ver el progreso.</div>
+</section>
+<footer>Consejo: usa buena iluminación, enfoca la etiqueta y evita reflejos. La lectura OCR debe revisarse antes de confirmar.</footer>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+let workbook=null, mainSheet=null, headerRow=1, idCol=null, pnCol=null, modelCol=null, locCol=null, whCol=null;
+let currentMatchRow=null, currentRecord=null, stream=null, worker=null, unknownSheet=null;
+let doneRows=new Set();
+const normalize=s=>(s??"").toString().normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[º°]/g,"o").replace(/[^a-z0-9]/g,"");
+function cellText(v){if(v==null)return ""; if(typeof v==="object" && v.text)return String(v.text); if(typeof v==="object" && v.richText)return v.richText.map(x=>x.text).join(""); return String(v).trim();}
+function findColumn(headers, tests){for(let i=0;i<headers.length;i++){const h=normalize(headers[i]);if(tests.some(t=>h.includes(t)))return i+1;}return null;}
+function setStatus(id,msg,kind=""){const el=$(id);el.textContent=msg;el.className="status "+kind;}
+function getHeaders(ws,row){const vals=[];for(let c=1;c<=ws.columnCount;c++) vals.push(cellText(ws.getRow(row).getCell(c).value));return vals;}
+
+const DB_NAME="inventario-econocom-db", DB_STORE="sesion";
+function openDB(){
+ return new Promise((resolve,reject)=>{
+  const req=indexedDB.open(DB_NAME,1);
+  req.onupgradeneeded=()=>req.result.createObjectStore(DB_STORE);
+  req.onsuccess=()=>resolve(req.result);
+  req.onerror=()=>reject(req.error);
+ });
+}
+async function saveSession(){
+ if(!workbook)return;
+ try{
+  const buffer=await workbook.xlsx.writeBuffer();
+  const db=await openDB();
+  await new Promise((resolve,reject)=>{
+   const tx=db.transaction(DB_STORE,"readwrite");
+   tx.objectStore(DB_STORE).put({buffer,fileName:$("fileStatus").dataset.fileName||"INVENTARIO.xlsx"},"actual");
+   tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);
+  });
+  db.close();
+ }catch(e){console.warn("No se pudo guardar la sesión local:",e);}
+}
+async function restoreSession(){
+ try{
+  const db=await openDB();
+  const saved=await new Promise((resolve,reject)=>{
+   const req=db.transaction(DB_STORE,"readonly").objectStore(DB_STORE).get("actual");
+   req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
+  });
+  db.close();
+  if(saved?.buffer){
+   await loadWorkbook(saved.buffer,saved.fileName||"INVENTARIO.xlsx");
+   setStatus("fileStatus","Sesión recuperada del almacenamiento local de este teléfono: "+(saved.fileName||"INVENTARIO.xlsx"),"good");
+  }
+ }catch(e){console.warn("No se pudo recuperar la sesión local:",e);}
+}
+async function loadWorkbook(buffer,fileName){
+ workbook=new ExcelJS.Workbook();
+ await workbook.xlsx.load(buffer);
+ mainSheet=workbook.worksheets.find(s=>normalize(s.name)!=="encontradofuerastock")||workbook.worksheets[0];
+ detectColumns();doneRows=new Set();
+ for(let r=headerRow+1;r<=mainSheet.rowCount;r++){
+  const fill=mainSheet.getRow(r).getCell(1).fill;
+  if(fill&&fill.fgColor&&(fill.fgColor.argb||"").toUpperCase()==="FF92D050")doneRows.add(r);
+ }
+ getOrCreateUnknown();
+ $("fileStatus").dataset.fileName=fileName;
+ $("fileStatus").textContent=`Cargado: ${fileName} · Hoja: ${mainSheet.name} · ${Math.max(0,mainSheet.rowCount-headerRow)} filas. Columna de identificación: ${idCol?getHeaders(mainSheet,headerRow)[idCol-1]:"no detectada"}.`;
+ $("exportBtn").disabled=false;updateProgress();
+ await saveSession();
+}
+
+function detectColumns(){
+ let found=null;
+ for(let r=1;r<=Math.min(mainSheet.rowCount,15);r++){
+  const hs=getHeaders(mainSheet,r);
+  const id=findColumn(hs,["stockid","numeroerie","noserie","serialnumber","serial","assetid"]);
+  if(id){found={r,hs,id};break;}
+ }
+ if(!found){headerRow=1;const hs=getHeaders(mainSheet,1);found={r:1,hs,id:findColumn(hs,["stockid","numeroerie","noserie","serialnumber","serial","assetid"])};}
+ headerRow=found.r; idCol=found.id;
+ pnCol=findColumn(found.hs,["pn","numeroproducto","referencia","itemno","productno"]);
+ modelCol=findColumn(found.hs,["modelo","model","tm mod"]);
+ locCol=findColumn(found.hs,["ubic","estant","location","bin"]);
+ whCol=findColumn(found.hs,["almacen","warehouse"]);
+}
+function updateProgress(){
+ const total=Math.max(0,mainSheet?mainSheet.rowCount-headerRow:0);
+ const done=doneRows.size;
+ $("countDone").textContent=done+" / "+total;
+ $("progress").max=Math.max(1,total);$("progress").value=Math.min(done,total);
+ $("progressText").textContent=total?`Comprobadas ${done} de ${total} filas de datos.`:"Carga el Excel para ver el progreso.";
+}
+function getOrCreateUnknown(){
+ let ws=workbook.getWorksheet("ENCONTRADO FUERA STOCK");
+ if(!ws){ws=workbook.addWorksheet("ENCONTRADO FUERA STOCK");
+  ws.addRow(["STOCK-ID / Nº serie","P/N","Modelo","Ubicación etiqueta","Fecha y hora","Texto OCR"]);
+  ws.getRow(1).font={bold:true,color:{argb:"FFFFFFFF"}};
+  ws.getRow(1).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF17324D"}};
+ }
+ return ws;
+}
+function readLabel(text){
+ const lines=text.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+ const joined=lines.join(" ");
+ const find=(re)=>{const m=joined.match(re);return m?m[1].trim():"";};
+ let stock=find(/(?:STOCK[\s-]*ID|N[º°]?\s*SERIE|SERIAL(?:\s*(?:NO|NUMBER))?)\s*[:#]?\s*([A-Z0-9][A-Z0-9-]{4,})/i);
+ if(!stock){const m=joined.match(/\bS\d{5,}\b/i);if(m)stock=m[0];}
+ const pn=find(/(?:P\s*\/\s*N|PART\s*NUMBER|N[º°]?\s*PRODUCTO)\s*[:#]?\s*([A-Z0-9][A-Z0-9-]{2,})/i);
+ const model=find(/(?:TM\s*\/\s*MOD\.?|MODEL(?:O)?)\s*[:#]?\s*([A-Z0-9][A-Z0-9 /_-]{1,})/i).split(/\s{2,}/)[0];
+ const loc=find(/(?:UBIC(?:ACION)?\.?|LOCATION)\s*[:#]?\s*([A-Z0-9-]+)/i);
+ return {stock,pn,model:model.trim(),loc,raw:text};
+}
+function lookupStock(stock){
+ if(!mainSheet||!idCol||!stock)return null;
+ const wanted=normalize(stock);
+ for(let r=headerRow+1;r<=mainSheet.rowCount;r++){
+  const v=normalize(cellText(mainSheet.getRow(r).getCell(idCol).value));
+  if(v && v===wanted)return r;
+ }
+ return null;
+}
+function recordUnknown(rec){
+ const ws=getOrCreateUnknown();
+ const key=normalize(rec.stock);
+ for(let r=2;r<=ws.rowCount;r++){
+  if(normalize(cellText(ws.getRow(r).getCell(1).value))===key)return;
+ }
+ ws.addRow([rec.stock,rec.pn,rec.model,rec.loc,new Date().toLocaleString("es-ES"),rec.raw]);
+ unknownSheet=ws;
+}
+function showRecord(rec){
+ currentRecord=rec;currentMatchRow=lookupStock(rec.stock);
+ $("emptyResult").classList.add("hidden");$("result").classList.remove("hidden");
+ $("stockId").value=rec.stock||"";
+ $("pnValue").textContent=rec.pn||"—";$("modelValue").textContent=rec.model||"—";$("locValue").textContent=rec.loc||"—";
+ if(!rec.stock){$("matchValue").textContent="Sin STOCK-ID";setStatus("matchInfo","No he podido identificar el STOCK-ID. Corrígelo manualmente antes de confirmar.","bad");}
+ else if(!idCol){$("matchValue").textContent="Columna no detectada";setStatus("matchInfo","No he encontrado una columna STOCK-ID o Nº serie en la cabecera del Excel. Revisa el formato del archivo.","warn");}
+ else if(currentMatchRow){$("matchValue").textContent="Fila "+currentMatchRow;setStatus("matchInfo","Referencia encontrada en el inventario. Revisa los datos y confirma.","good");}
+ else{$("matchValue").textContent="Fuera de stock";setStatus("matchInfo","No aparece en el inventario. Si confirmas con SÍ, se añadirá a ENCONTRADO FUERA STOCK.","warn");}
+ $("yesBtn").disabled=!rec.stock;$("noBtn").disabled=!rec.stock;
+}
+async function ensureWorker(){
+ if(worker)return worker;
+ if(!window.Tesseract)throw new Error("No se ha podido cargar el motor OCR. Comprueba la conexión a Internet.");
+ setStatus("ocrStatus","Preparando reconocimiento OCR en español…");
+ worker=await Tesseract.createWorker("spa",1,{logger:m=>{if(m.status==="recognizing text")setStatus("ocrStatus",`Reconociendo texto… ${Math.round((m.progress||0)*100)}%`);}});
+ return worker;
+}
+async function recognize(canvas){
+ try{
+  await ensureWorker();
+  const result=await worker.recognize(canvas);
+  const rec=readLabel(result.data.text||"");
+  if(!rec.stock){
+   setStatus("ocrStatus","No he detectado un STOCK-ID. Prueba con más luz o corrige la foto.","bad");
+   $("emptyResult").classList.remove("hidden");$("result").classList.add("hidden");return;
+  }
+  showRecord(rec);
+  setStatus("ocrStatus","Lectura completada. Comprueba el STOCK-ID antes de confirmar.","good");
+ }catch(e){setStatus("ocrStatus",e.message||"Error durante el reconocimiento OCR.","bad");}
+}
+$("excelFile").addEventListener("change",async e=>{
+ const file=e.target.files[0];if(!file)return;
+ try{
+  if(!window.ExcelJS)throw new Error("No se ha podido cargar el lector de Excel. Comprueba Internet.");
+  const buf=await file.arrayBuffer();
+  await loadWorkbook(buf,file.name);
+  setStatus("fileStatus","Excel cargado y guardado en el almacenamiento local del teléfono.","good");
+ }catch(err){setStatus("fileStatus","No se pudo abrir el Excel: "+err.message,"bad");}
+});
+$("startCam").addEventListener("click",async()=>{
+ try{
+  if(!navigator.mediaDevices?.getUserMedia)throw new Error("Este navegador no permite abrir la cámara desde este archivo. Usa «Usar foto» o abre la aplicación desde una página HTTPS.");
+  stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}},audio:false});
+  $("video").srcObject=stream;$("video").classList.remove("hidden");$("captureBtn").disabled=false;$("stopCam").disabled=false;
+  setStatus("ocrStatus","Cámara abierta. Enfoca la etiqueta y pulsa «Capturar y reconocer».","good");
+  }catch(err){
+  const msg=!window.isSecureContext
+   ?"Chrome bloquea la cámara porque la aplicación no está abierta desde HTTPS. Publica/abre esta página mediante un enlace https://."
+   :(err.name==="NotAllowedError"?"Chrome o Android ha bloqueado el permiso de cámara para esta página. Revisa el permiso de cámara del sitio.":(err.message||"No se pudo abrir la cámara."));
+  setStatus("ocrStatus",msg,"bad");
+ }
+});
+$("stopCam").addEventListener("click",()=>{if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;$("video").classList.add("hidden");$("captureBtn").disabled=true;$("stopCam").disabled=true;});
+$("captureBtn").addEventListener("click",async()=>{
+ const v=$("video"),c=$("canvas");if(!v.videoWidth)return;
+ c.width=v.videoWidth;c.height=v.videoHeight;c.getContext("2d").drawImage(v,0,0,c.width,c.height);
+ await recognize(c);
+});
+$("photoFile").addEventListener("change",async e=>{
+ const f=e.target.files[0];if(!f)return;
+ const img=new Image();img.onload=async()=>{const c=$("canvas");c.width=img.naturalWidth;c.height=img.naturalHeight;c.getContext("2d").drawImage(img,0,0);await recognize(c);URL.revokeObjectURL(img.src);};
+ img.src=URL.createObjectURL(f);
+});
+$("stockId").addEventListener("input",()=>{
+ if(!currentRecord)return;
+ currentRecord.stock=$("stockId").value.trim();currentMatchRow=lookupStock(currentRecord.stock);
+ if(currentMatchRow){$("matchValue").textContent="Fila "+currentMatchRow;setStatus("matchInfo","Referencia encontrada en el inventario. Revisa y confirma.","good");}
+ else{$("matchValue").textContent="Fuera de stock";setStatus("matchInfo","No aparece en el inventario. Si pulsas SÍ, se guardará en la pestaña de encontrados.","warn");}
+ $("yesBtn").disabled=!currentRecord.stock;$("noBtn").disabled=!currentRecord.stock;
+});
+function nextLabel(){
+ $("result").classList.add("hidden");$("emptyResult").classList.remove("hidden");$("emptyResult").textContent="Listo para la siguiente etiqueta.";
+ currentRecord=null;currentMatchRow=null;
+}
+$("yesBtn").addEventListener("click",async()=>{
+ if(!currentRecord?.stock||!workbook)return;
+ const row=lookupStock(currentRecord.stock);
+ if(row){
+  const rr=mainSheet.getRow(row);
+  for(let c=1;c<=mainSheet.columnCount;c++)rr.getCell(c).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF92D050"}};
+  rr.commit?.();doneRows.add(row);
+ }else recordUnknown(currentRecord);
+ updateProgress();await saveSession();setStatus("ocrStatus","Comprobación guardada en este teléfono. Puedes leer la siguiente etiqueta.","good");nextLabel();
+});
+$("noBtn").addEventListener("click",()=>{
+ if(!currentRecord)return;
+ if(!lookupStock(currentRecord.stock))recordUnknown(currentRecord);
+ setStatus("ocrStatus","Marcada como NO comprobada. Preparado para la siguiente etiqueta.","warn");nextLabel();
+});
+$("exportBtn").addEventListener("click",async()=>{
+ if(!workbook)return;
+ try{
+  const ws=getOrCreateUnknown();
+  const buffer=await workbook.xlsx.writeBuffer();
+  const blob=new Blob([buffer],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="INVENTARIO_ACTUALIZADO.xlsx";a.click();URL.revokeObjectURL(url);
+  setStatus("fileStatus","Excel actualizado descargado en el teléfono. Ya puedes compartirlo por WhatsApp.","good");
+ }catch(e){setStatus("fileStatus","No se pudo exportar: "+e.message,"bad");}
+});
+window.addEventListener("load",()=>{restoreSession();});
+})();
+</script>
+</body></html>
