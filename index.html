@@ -3,887 +3,784 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#17324d">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Inventario ECONOCOM</title>
 
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js"></script>
+
 <style>
-:root {
-  font-family: system-ui, sans-serif;
-  color: #17212b;
-  background: #f3f6f8;
+*{box-sizing:border-box}
+body{
+  font-family:Arial,sans-serif;
+  background:#f2f4f7;
+  margin:0;
+  padding:15px;
+  color:#222;
 }
-* { box-sizing: border-box; }
-body { margin: 0; }
-header {
-  background: #17324d;
-  color: white;
-  padding: 18px 16px;
+h1{font-size:23px}
+.panel{
+  background:white;
+  padding:16px;
+  border-radius:12px;
+  margin-bottom:15px;
+  box-shadow:0 2px 7px #0001;
 }
-header h1 { font-size: 20px; margin: 0 0 4px; }
-header p { margin: 0; color: #d5e2ee; font-size: 13px; }
-main {
-  max-width: 720px;
-  margin: auto;
-  padding: 14px;
-  display: grid;
-  gap: 12px;
+button,input{
+  width:100%;
+  padding:12px;
+  margin:6px 0;
+  font-size:16px;
+  border-radius:8px;
+  border:1px solid #bbb;
 }
-.card {
-  background: white;
-  border: 1px solid #dce3e8;
-  border-radius: 16px;
-  padding: 15px;
+button{
+  background:#174b78;
+  color:white;
+  border:0;
+  font-weight:bold;
 }
-h2 { font-size: 16px; margin: 0 0 10px; }
-.muted { color: #647382; font-size: 13px; }
-.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-button, .filelabel {
-  border: 0;
-  border-radius: 12px;
-  padding: 13px 15px;
-  font-size: 15px;
-  font-weight: 650;
-  cursor: pointer;
+button.secondary{background:#64748b}
+button:disabled{opacity:.45}
+video{
+  width:100%;
+  background:#111;
+  border-radius:10px;
+  max-height:400px;
 }
-button:disabled { opacity: .45; cursor: not-allowed; }
-.primary { background: #1769aa; color: white; }
-.secondary, .filelabel { background: #e8eef3; color: #17324d; }
-.yes { background: #18834b; color: white; flex: 1; }
-.no { background: #b42318; color: white; flex: 1; }
-input[type=file] { display: none; }
-input[type=text] {
-  width: 100%;
-  padding: 12px;
-  border: 1px solid #cbd5df;
-  border-radius: 10px;
-  font-size: 16px;
+.status{
+  padding:12px;
+  margin-top:10px;
+  border-radius:8px;
+  background:#edf1f5;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
 }
-video {
-  width: 100%;
-  max-height: 48vh;
-  object-fit: cover;
-  background: #101820;
-  border-radius: 12px;
+.good{background:#d9f4df;color:#14532d}
+.warn{background:#fff0cc;color:#744b00}
+.bad{background:#fde0e0;color:#8b1d1d}
+.candidate{
+  border:1px solid #ccd3dc;
+  padding:12px;
+  border-radius:9px;
+  margin:10px 0;
 }
-.status {
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: #eef3f7;
-  font-size: 14px;
-}
-.status.good { background: #e6f5ec; color: #126238; }
-.status.warn { background: #fff3db; color: #805500; }
-.status.bad { background: #fde9e7; color: #9b1c13; }
-.data {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-.data div {
-  background: #f4f7f9;
-  padding: 10px;
-  border-radius: 10px;
-  min-width: 0;
-}
-.data small {
-  display: block;
-  color: #627181;
-  font-size: 11px;
-  text-transform: uppercase;
-}
-.data strong { overflow-wrap: anywhere; }
-.actions { display: flex; gap: 10px; margin-top: 12px; }
-.hidden { display: none !important; }
-progress { width: 100%; height: 10px; accent-color: #18834b; }
-footer {
-  font-size: 12px;
-  color: #647382;
-  text-align: center;
-  padding: 4px 10px 20px;
-}
-@media(min-width:600px) {
-  main { padding: 20px; }
-}
+.candidate strong{display:block;margin-bottom:7px}
+.small{font-size:13px;color:#596575}
+.hidden{display:none}
 </style>
 </head>
 
 <body>
-<header>
-  <h1>Inventario ECONOCOM</h1>
-  <p>Lector de etiquetas por cámara · OCR mejorado · Excel local</p>
-</header>
 
-<main>
+<h1>Inventario ECONOCOM</h1>
 
-<section class="card">
-  <h2>1. Cargar Excel de inventario</h2>
-  <div class="row">
-    <label class="filelabel" for="excelFile">Seleccionar Excel</label>
-    <input id="excelFile" type="file" accept=".xlsx">
-    <button id="exportBtn" class="secondary" disabled>
-      Exportar Excel actualizado
-    </button>
+<div class="panel">
+  <h3>1. Cargar Excel</h3>
+  <input type="file" id="file" accept=".xlsx,.xlsm">
+  <div id="fileStatus" class="status">
+    Selecciona tu Excel de inventario.
   </div>
-  <div id="fileStatus" class="status" style="margin-top:10px">
-    Carga una copia del Excel para empezar.
-  </div>
-  <p class="muted">
-    El Excel se procesa en el navegador. El original no se modifica.
-  </p>
-</section>
+</div>
 
-<section class="card">
-  <h2>2. Leer etiqueta</h2>
-  <div class="row" style="margin-bottom:10px">
-    <button id="startCam" class="primary">Abrir cámara</button>
-    <button id="stopCam" class="secondary" disabled>Cerrar cámara</button>
-    <button id="torchBtn" class="secondary" disabled>Encender linterna</button>
-    <label class="filelabel" for="photoFile">Usar foto</label>
-    <input id="photoFile" type="file" accept="image/*" capture="environment">
+<div class="panel">
+  <h3>2. Leer código de barras</h3>
+
+  <video id="video" playsinline muted></video>
+
+  <button id="startBtn">Abrir cámara</button>
+  <button id="stopBtn" class="secondary" disabled>Detener cámara</button>
+
+  <button id="torchBtn" class="secondary hidden">
+    Encender linterna
+  </button>
+
+  <div id="scanStatus" class="status">
+    Esperando cámara.
   </div>
 
-  <video id="video" playsinline autoplay class="hidden"></video>
-  <canvas id="canvas" class="hidden"></canvas>
+  <h4>Introducir código manualmente</h4>
 
-  <div class="row" style="margin-top:10px">
-    <button id="captureBtn" class="primary" disabled>
-      Capturar y reconocer
-    </button>
+  <input
+    id="manualCode"
+    placeholder="Ej.: *05Y1J9%S250037"
+  >
+
+  <button id="searchBtn">
+    Buscar en Excel
+  </button>
+</div>
+
+<div class="panel">
+  <h3>3. Resultados</h3>
+
+  <div id="resultInfo" class="status">
+    Todavía no hay resultados.
   </div>
 
-  <div id="ocrStatus" class="status" style="margin-top:10px">
-    Pulsa Abrir cámara para empezar.
-  </div>
-</section>
+  <div id="candidates"></div>
+</div>
 
-<section class="card">
-  <h2>3. Resultado de lectura</h2>
+<div class="panel">
+  <h3>4. Exportar inventario</h3>
 
-  <div id="emptyResult" class="muted">
-    Todavía no se ha leído ninguna etiqueta.
-  </div>
-
-  <div id="result" class="hidden">
-    <label class="muted" for="stockId">
-      STOCK-ID / Nº serie reconocido (puedes corregirlo)
-    </label>
-    <input id="stockId" type="text" autocomplete="off"
-      placeholder="Ej. S25003774">
-
-    <div class="data" style="margin-top:10px">
-      <div><small>P/N</small><strong id="pnValue">—</strong></div>
-      <div><small>Modelo</small><strong id="modelValue">—</strong></div>
-      <div><small>Ubicación etiqueta</small><strong id="locValue">—</strong></div>
-      <div><small>Coincidencia Excel</small><strong id="matchValue">Pendiente</strong></div>
-    </div>
-
-    <div id="matchInfo" class="status" style="margin-top:10px">
-      Revisa el resultado.
-    </div>
-
-    <div class="actions">
-      <button id="yesBtn" class="yes" disabled>SÍ · Comprobado</button>
-      <button id="noBtn" class="no" disabled>NO · No comprobado</button>
-    </div>
-  </div>
-</section>
-
-<section class="card">
-  <h2>Progreso</h2>
-  <div class="row" style="justify-content:space-between">
-    <span>Filas marcadas en verde</span>
-    <strong id="countDone">0</strong>
-  </div>
-  <progress id="progress" value="0" max="1"></progress>
-  <div class="muted" id="progressText">
-    Carga el Excel para ver el progreso.
-  </div>
-</section>
-
-<footer>
-  Usa buena iluminación, enfoca la etiqueta y evita reflejos.
-  Comprueba siempre el código antes de confirmar.
-</footer>
-
-</main>
-
-<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+  <button id="exportBtn" disabled>
+    Descargar Excel actualizado
+  </button>
+</div>
 
 <script>
-(() => {
-"use strict";
-
 const $ = id => document.getElementById(id);
 
 let workbook = null;
-let mainSheet = null;
-let headerRow = 1;
-let idCol = null;
-let stream = null;
-let worker = null;
+let worksheet = null;
+let headers = null;
+let workbookName = "Inventario_ECONOCOM_actualizado.xlsx";
+
+let reader = null;
+let controls = null;
+let activeTrack = null;
 let torchOn = false;
 
-let currentMatchRow = null;
-let currentRecord = null;
-let doneRows = new Set();
-
-const normalize = s =>
-  (s ?? "").toString()
-  .normalize("NFD")
-  .replace(/[\u0300-\u036f]/g, "")
-  .toLowerCase()
-  .replace(/[º°]/g, "o")
-  .replace(/[^a-z0-9]/g, "");
-
-function cellText(v) {
-  if (v == null) return "";
-  if (typeof v === "object" && v.text) return String(v.text);
-  if (typeof v === "object" && v.richText)
-    return v.richText.map(x => x.text).join("");
-  return String(v).trim();
+function normalize(value){
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g,"")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g,"");
 }
 
-function setStatus(id, msg, kind = "") {
-  const el = $(id);
-  el.textContent = msg;
-  el.className = "status " + kind;
-}
+function cellText(cell){
+  if(!cell || cell.value == null) return "";
 
-function findColumn(headers, tests) {
-  for (let i = 0; i < headers.length; i++) {
-    const h = normalize(headers[i]);
-    if (tests.some(t => h.includes(t))) return i + 1;
+  const v=cell.value;
+
+  if(typeof v==="object"){
+    if(v.text) return String(v.text);
+    if(v.richText) return v.richText.map(x=>x.text).join("");
+    if(v.result!=null) return String(v.result);
   }
-  return null;
+
+  return String(v);
 }
 
-function getHeaders(ws, row) {
-  const vals = [];
-  for (let c = 1; c <= ws.columnCount; c++) {
-    vals.push(cellText(ws.getRow(row).getCell(c).value));
-  }
-  return vals;
+function status(id,text,type=""){
+  $(id).textContent=text;
+  $(id).className="status "+type;
 }
 
-function detectColumns() {
-  let found = null;
+/*
+  Convierte:
+  *05Y1J9%S250037
 
-  for (let r = 1; r <= Math.min(mainSheet.rowCount, 15); r++) {
-    const hs = getHeaders(mainSheet, r);
-    const id = findColumn(hs, [
-      "stockid", "numeroerie", "noserie",
-      "serialnumber", "serial", "assetid"
-    ]);
+  En:
+  P/N = 05Y1J9
+  STOCK-ID = S250037
+*/
 
-    if (id) {
-      found = { r, hs, id };
-      break;
+function parseBarcode(raw){
+
+  const value=String(raw || "").trim().toUpperCase();
+
+  let pn="";
+  let stock="";
+
+  const match=value.match(/^\*?([^%|;]+)[%|;](.+?)\*?$/);
+
+  if(match){
+
+    pn=match[1].replace(/^\*/,"").trim();
+    stock=match[2].replace(/\*$/,"").trim();
+
+  }else{
+
+    const clean=value.replace(/^\*|\*$/g,"").trim();
+
+    if(/^S/.test(clean)){
+      stock=clean;
+    }else{
+      pn=clean;
     }
   }
 
-  if (!found) {
-    const hs = getHeaders(mainSheet, 1);
-    found = {
-      r: 1,
-      hs,
-      id: findColumn(hs, [
-        "stockid", "numeroerie", "noserie",
-        "serialnumber", "serial", "assetid"
-      ])
-    };
-  }
-
-  headerRow = found.r;
-  idCol = found.id;
+  return {raw:value,pn,stock};
 }
 
-function updateProgress() {
-  const total = Math.max(
-    0, mainSheet ? mainSheet.rowCount - headerRow : 0
-  );
-  const done = doneRows.size;
+/*
+  Detecta los encabezados del Excel.
+  Busca nombres habituales para las columnas.
+*/
 
-  $("countDone").textContent = done + " / " + total;
-  $("progress").max = Math.max(1, total);
-  $("progress").value = Math.min(done, total);
-  $("progressText").textContent = total
-    ? `Comprobadas ${done} de ${total} filas de datos.`
-    : "Carga el Excel para ver el progreso.";
-}
+function detectHeaders(ws){
 
-function getOrCreateUnknown() {
-  let ws = workbook.getWorksheet("ENCONTRADO FUERA STOCK");
+  const aliases={
+    pn:[
+      "PN",
+      "PARTNUMBER",
+      "NUMEROPRODUCTO",
+      "CODIGOPRODUCTO",
+      "REFERENCIA",
+      "PRODUCTNUMBER"
+    ],
 
-  if (!ws) {
-    ws = workbook.addWorksheet("ENCONTRADO FUERA STOCK");
-    ws.addRow([
-      "STOCK-ID / Nº serie",
-      "P/N",
-      "Modelo",
-      "Ubicación etiqueta",
-      "Fecha y hora",
-      "Texto OCR"
-    ]);
-    ws.getRow(1).font = {
-      bold: true,
-      color: { argb: "FFFFFFFF" }
-    };
-    ws.getRow(1).fill = {
-      type: "pattern",
-      pattern: "solid",
-      fgColor: { argb: "FF17324D" }
-    };
-  }
+    stock:[
+      "STOCKID",
+      "IDSTOCK",
+      "CODIGOALMACEN",
+      "CODALMACEN",
+      "STOCK"
+    ],
 
-  return ws;
-}
+    serial:[
+      "NUMEROSERIE",
+      "NSERIE",
+      "SERIAL",
+      "SERIALNUMBER"
+    ],
 
-function readLabel(text) {
-  const lines = text.split(/\r?\n/)
-    .map(x => x.trim())
-    .filter(Boolean);
+    description:[
+      "DESCRIPCION",
+      "DESCRIPTION",
+      "MODELO",
+      "TMOD"
+    ],
 
-  const joined = lines.join(" ");
-
-  const find = re => {
-    const m = joined.match(re);
-    return m ? m[1].trim() : "";
+    location:[
+      "UBICACION",
+      "ESTANTERIA",
+      "LOCATION",
+      "SHELF"
+    ]
   };
 
-  let stock = find(
-    /(?:STOCK[\s-]*ID|N[º°]?\s*SERIE|SERIAL(?:\s*(?:NO|NUMBER))?)\s*[:#]?\s*([A-Z0-9][A-Z0-9-]{4,})/i
-  );
+  const max=Math.min(ws.rowCount || 30,30);
 
-  if (!stock) {
-    const m = joined.match(/\bS\d{5,}\b/i);
-    if (m) stock = m[0];
-  }
+  for(let r=1;r<=max;r++){
 
-  const pn = find(
-    /(?:P\s*\/\s*N|PART\s*NUMBER|N[º°]?\s*PRODUCTO)\s*[:#]?\s*([A-Z0-9][A-Z0-9-]{2,})/i
-  );
+    const row=ws.getRow(r);
+    const found={};
 
-  const model = find(
-    /(?:TM\s*\/\s*MOD\.?|MODEL(?:O)?)\s*[:#]?\s*([A-Z0-9][A-Z0-9 /_-]{1,})/i
-  );
+    row.eachCell((cell,col)=>{
 
-  const loc = find(
-    /(?:UBIC(?:ACION)?\.?|LOCATION)\s*[:#]?\s*([A-Z0-9-]+)/i
-  );
+      const value=normalize(cellText(cell));
 
-  return {
-    stock,
-    pn,
-    model: model.trim(),
-    loc,
-    raw: text
-  };
-}
+      for(const key in aliases){
 
-function lookupStock(stock) {
-  if (!mainSheet || !idCol || !stock) return null;
-
-  const wanted = normalize(stock);
-
-  for (let r = headerRow + 1; r <= mainSheet.rowCount; r++) {
-    const v = normalize(
-      cellText(mainSheet.getRow(r).getCell(idCol).value)
-    );
-
-    if (v && v === wanted) return r;
-  }
-
-  return null;
-}
-
-function recordUnknown(rec) {
-  const ws = getOrCreateUnknown();
-  const key = normalize(rec.stock);
-
-  for (let r = 2; r <= ws.rowCount; r++) {
-    if (normalize(cellText(ws.getRow(r).getCell(1).value)) === key)
-      return;
-  }
-
-  ws.addRow([
-    rec.stock,
-    rec.pn,
-    rec.model,
-    rec.loc,
-    new Date().toLocaleString("es-ES"),
-    rec.raw
-  ]);
-}
-
-function showRecord(rec) {
-  currentRecord = rec;
-  currentMatchRow = lookupStock(rec.stock);
-
-  $("emptyResult").classList.add("hidden");
-  $("result").classList.remove("hidden");
-  $("stockId").value = rec.stock || "";
-  $("pnValue").textContent = rec.pn || "—";
-  $("modelValue").textContent = rec.model || "—";
-  $("locValue").textContent = rec.loc || "—";
-
-  if (!rec.stock) {
-    $("matchValue").textContent = "Sin STOCK-ID";
-    setStatus("matchInfo",
-      "No he podido identificar el STOCK-ID. Corrígelo manualmente.",
-      "bad");
-  } else if (!idCol) {
-    $("matchValue").textContent = "Columna no detectada";
-    setStatus("matchInfo",
-      "No se ha detectado la columna de identificación del Excel.",
-      "warn");
-  } else if (currentMatchRow) {
-    $("matchValue").textContent = "Fila " + currentMatchRow;
-    setStatus("matchInfo",
-      "Referencia encontrada. Revisa los datos y confirma.",
-      "good");
-  } else {
-    $("matchValue").textContent = "Fuera de stock";
-    setStatus("matchInfo",
-      "No aparece en el inventario. Si confirmas con SÍ se añadirá a la hoja de encontrados.",
-      "warn");
-  }
-
-  $("yesBtn").disabled = !rec.stock;
-  $("noBtn").disabled = !rec.stock;
-}
-
-/* Mejora de imagen:
-   escala de grises, contraste, ampliación y umbral adaptado. */
-function improveImage(sourceCanvas, binary = false) {
-  const output = document.createElement("canvas");
-  const scale = 2;
-
-  output.width = sourceCanvas.width * scale;
-  output.height = sourceCanvas.height * scale;
-
-  const ctx = output.getContext("2d", { willReadFrequently: true });
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(
-    sourceCanvas, 0, 0, output.width, output.height
-  );
-
-  const image = ctx.getImageData(
-    0, 0, output.width, output.height
-  );
-  const data = image.data;
-
-  // Primer cálculo: escala de grises y contraste.
-  for (let i = 0; i < data.length; i += 4) {
-    const gray =
-      0.299 * data[i] +
-      0.587 * data[i + 1] +
-      0.114 * data[i + 2];
-
-    let value = (gray - 128) * 1.45 + 128;
-    value = Math.max(0, Math.min(255, value));
-
-    data[i] = value;
-    data[i + 1] = value;
-    data[i + 2] = value;
-  }
-
-  // Segunda variante: blanco y negro con umbral.
-  if (binary) {
-    for (let i = 0; i < data.length; i += 4) {
-      const v = data[i] > 165 ? 255 : 0;
-      data[i] = v;
-      data[i + 1] = v;
-      data[i + 2] = v;
-    }
-  }
-
-  ctx.putImageData(image, 0, 0);
-  return output;
-}
-
-async function ensureWorker() {
-  if (worker) return worker;
-
-  if (!window.Tesseract) {
-    throw new Error(
-      "No se ha podido cargar OCR. Comprueba Internet."
-    );
-  }
-
-  setStatus("ocrStatus", "Preparando OCR en español…");
-
-  worker = await Tesseract.createWorker(
-    "spa",
-    1,
-    {
-      logger: m => {
-        if (m.status === "recognizing text") {
-          setStatus(
-            "ocrStatus",
-            "Reconociendo texto… " +
-            Math.round((m.progress || 0) * 100) + "%"
-          );
+        if(aliases[key].includes(value) && !found[key]){
+          found[key]=col;
         }
+
       }
-    }
-  );
-
-  return worker;
-}
-
-async function recognize(sourceCanvas) {
-  try {
-    await ensureWorker();
-
-    setStatus("ocrStatus",
-      "Primer intento: mejorando contraste y nitidez…");
-
-    const firstImage = improveImage(sourceCanvas, false);
-
-    await worker.setParameters({
-      tessedit_pageseg_mode: "6"
     });
 
-    const first = await worker.recognize(firstImage);
-    let bestText = first.data.text || "";
-    let bestRecord = readLabel(bestText);
-
-    if (!bestRecord.stock) {
-      setStatus("ocrStatus",
-        "Segundo intento: blanco y negro y búsqueda de texto…");
-
-      const secondImage = improveImage(sourceCanvas, true);
-
-      await worker.setParameters({
-        tessedit_pageseg_mode: "11"
-      });
-
-      const second = await worker.recognize(secondImage);
-      const secondText = second.data.text || "";
-      const secondRecord = readLabel(secondText);
-
-      if (secondRecord.stock) {
-        bestText = secondText;
-        bestRecord = secondRecord;
-      }
+    if(found.pn || found.stock){
+      return {row:r,cols:found};
     }
-
-    if (!bestRecord.stock) {
-      setStatus("ocrStatus",
-        "No he detectado el STOCK-ID. Prueba con más luz, enfoque o corrige la foto.",
-        "bad");
-      $("emptyResult").classList.remove("hidden");
-      $("result").classList.add("hidden");
-      return;
-    }
-
-    showRecord(bestRecord);
-
-    setStatus("ocrStatus",
-      "Lectura completada. Comprueba el STOCK-ID antes de confirmar.",
-      "good");
-
-  } catch (e) {
-    setStatus("ocrStatus",
-      e.message || "Error durante el reconocimiento OCR.",
-      "bad");
   }
+
+  return null;
 }
 
-/* Cargar Excel */
-$("excelFile").addEventListener("change", async e => {
-  const file = e.target.files[0];
-  if (!file) return;
+function getCell(row,col){
+  return col ? cellText(row.getCell(col)) : "";
+}
 
-  try {
-    if (!window.ExcelJS) {
-      throw new Error("No se ha podido cargar ExcelJS. Comprueba Internet.");
-    }
+/*
+  Cargar el Excel localmente.
+*/
 
-    const buf = await file.arrayBuffer();
-    workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(buf);
+$("file").addEventListener("change",async e=>{
 
-    mainSheet = workbook.worksheets.find(
-      s => normalize(s.name) !== "encontradofuerastock"
+  const file=e.target.files[0];
+
+  if(!file)return;
+
+  try{
+
+    workbook=new ExcelJS.Workbook();
+
+    const buffer=await file.arrayBuffer();
+
+    await workbook.xlsx.load(buffer);
+
+    workbookName=file.name.replace(/\.(xlsx|xlsm)$/i,"")
+      +"_actualizado.xlsx";
+
+    worksheet=workbook.worksheets.find(
+      ws=>normalize(ws.name)!=="ENCONTRADOFUERASTOCK"
     ) || workbook.worksheets[0];
 
-    detectColumns();
-    doneRows = new Set();
+    headers=detectHeaders(worksheet);
 
-    for (let r = headerRow + 1; r <= mainSheet.rowCount; r++) {
-      const fill = mainSheet.getRow(r).getCell(1).fill;
-      if (fill && fill.fgColor &&
-          (fill.fgColor.argb || "").toUpperCase() === "FF92D050") {
-        doneRows.add(r);
-      }
-    }
-
-    getOrCreateUnknown();
-
-    $("fileStatus").textContent =
-      `Cargado: ${file.name} · Hoja: ${mainSheet.name} · ` +
-      `${Math.max(0, mainSheet.rowCount - headerRow)} filas. ` +
-      `Columna identificadora: ${
-        idCol ? getHeaders(mainSheet, headerRow)[idCol - 1] : "no detectada"
-      }.`;
-
-    $("exportBtn").disabled = false;
-    updateProgress();
-
-  } catch (err) {
-    setStatus("fileStatus",
-      "No se pudo abrir el Excel: " + err.message,
-      "bad");
-  }
-});
-
-/* Cámara */
-$("startCam").addEventListener("click", async () => {
-  try {
-    if (!navigator.mediaDevices?.getUserMedia) {
+    if(!headers){
       throw new Error(
-        "La cámara necesita que abras la aplicación desde HTTPS."
+        "No se han encontrado las columnas P/N o STOCK-ID."
       );
     }
 
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { ideal: "environment" },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 }
-      },
-      audio: false
-    });
+    const cols=headers.cols;
 
-    $("video").srcObject = stream;
-    $("video").classList.remove("hidden");
-    $("captureBtn").disabled = false;
-    $("stopCam").disabled = false;
+    const info=
+      "Excel cargado correctamente.\n"+
+      "Hoja: "+worksheet.name+"\n"+
+      "Fila de encabezados: "+headers.row+"\n"+
+      "P/N: columna "+(cols.pn || "NO DETECTADA")+"\n"+
+      "STOCK-ID: columna "+(cols.stock || "NO DETECTADA");
 
-    const track = stream.getVideoTracks()[0];
-    const capabilities = track.getCapabilities
-      ? track.getCapabilities()
-      : {};
+    $("fileStatus").textContent=info;
 
-    $("torchBtn").disabled = !capabilities.torch;
+    $("exportBtn").disabled=false;
 
-    if (!capabilities.torch) {
-      $("torchBtn").textContent = "Linterna no disponible";
-    } else {
-      $("torchBtn").textContent = "Encender linterna";
+    status(
+      "scanStatus",
+      "Excel preparado. Ya puedes escanear o introducir un código.",
+      "good"
+    );
+
+  }catch(err){
+
+    workbook=null;
+    worksheet=null;
+    headers=null;
+
+    status("fileStatus","Error: "+err.message,"bad");
+  }
+});
+
+/*
+  Búsqueda parcial en las dos columnas.
+*/
+
+function findCandidates(parsed){
+
+  const cols=headers.cols;
+  const found=[];
+
+  worksheet.eachRow((row,rowNum)=>{
+
+    if(rowNum<=headers.row)return;
+
+    const pn=getCell(row,cols.pn);
+    const stock=getCell(row,cols.stock);
+
+    const p=normalize(pn);
+    const s=normalize(stock);
+
+    const qpn=normalize(parsed.pn);
+    const qs=normalize(parsed.stock);
+
+    const pnMatch=
+      qpn && p && (p===qpn || p.includes(qpn) || qpn.includes(p));
+
+    const stockMatch=
+      qs && s && (s.includes(qs) || qs.includes(s));
+
+    if(pnMatch || stockMatch){
+
+      found.push({
+        rowNum,
+        pn,
+        stock,
+        serial:getCell(row,cols.serial),
+        description:getCell(row,cols.description),
+        location:getCell(row,cols.location),
+        pnMatch:!!pnMatch,
+        stockMatch:!!stockMatch
+      });
     }
+  });
 
-    setStatus("ocrStatus",
-      "Cámara abierta. Enfoca la etiqueta y captura.",
-      "good");
-
-  } catch (err) {
-    setStatus("ocrStatus",
-      err.message || "No se pudo abrir la cámara.",
-      "bad");
-  }
-});
-
-/* Linterna */
-$("torchBtn").addEventListener("click", async () => {
-  if (!stream) return;
-
-  try {
-    const track = stream.getVideoTracks()[0];
-    const capabilities = track.getCapabilities
-      ? track.getCapabilities()
-      : {};
-
-    if (!capabilities.torch) {
-      setStatus("ocrStatus",
-        "La cámara de este dispositivo no permite controlar la linterna.",
-        "warn");
-      return;
-    }
-
-    torchOn = !torchOn;
-
-    await track.applyConstraints({
-      advanced: [{ torch: torchOn }]
-    });
-
-    $("torchBtn").textContent =
-      torchOn ? "Apagar linterna" : "Encender linterna";
-
-  } catch (err) {
-    torchOn = false;
-    setStatus("ocrStatus",
-      "No se ha podido activar la linterna. Puedes usar el flash manual del móvil.",
-      "warn");
-  }
-});
-
-/* Cerrar cámara */
-$("stopCam").addEventListener("click", () => {
-  if (stream) {
-    stream.getTracks().forEach(t => t.stop());
-  }
-
-  stream = null;
-  torchOn = false;
-
-  $("video").classList.add("hidden");
-  $("captureBtn").disabled = true;
-  $("stopCam").disabled = true;
-  $("torchBtn").disabled = true;
-  $("torchBtn").textContent = "Encender linterna";
-});
-
-/* Captura */
-$("captureBtn").addEventListener("click", async () => {
-  const v = $("video");
-  const c = $("canvas");
-
-  if (!v.videoWidth) return;
-
-  c.width = v.videoWidth;
-  c.height = v.videoHeight;
-
-  c.getContext("2d").drawImage(
-    v, 0, 0, c.width, c.height
+  return found.sort((a,b)=>
+    (Number(b.pnMatch)+Number(b.stockMatch))-
+    (Number(a.pnMatch)+Number(a.stockMatch))
   );
-
-  await recognize(c);
-});
-
-/* Usar foto */
-$("photoFile").addEventListener("change", async e => {
-  const f = e.target.files[0];
-  if (!f) return;
-
-  const img = new Image();
-
-  img.onload = async () => {
-    const c = $("canvas");
-    c.width = img.naturalWidth;
-    c.height = img.naturalHeight;
-
-    c.getContext("2d").drawImage(img, 0, 0);
-    await recognize(c);
-
-    URL.revokeObjectURL(img.src);
-  };
-
-  img.src = URL.createObjectURL(f);
-});
-
-/* Corrección manual */
-$("stockId").addEventListener("input", () => {
-  if (!currentRecord) return;
-
-  currentRecord.stock = $("stockId").value.trim();
-  currentMatchRow = lookupStock(currentRecord.stock);
-
-  if (currentMatchRow) {
-    $("matchValue").textContent = "Fila " + currentMatchRow;
-    setStatus("matchInfo",
-      "Referencia encontrada. Revisa y confirma.",
-      "good");
-  } else {
-    $("matchValue").textContent = "Fuera de stock";
-    setStatus("matchInfo",
-      "No aparece en el inventario. Si confirmas con SÍ se añadirá a encontrados.",
-      "warn");
-  }
-
-  $("yesBtn").disabled = !currentRecord.stock;
-  $("noBtn").disabled = !currentRecord.stock;
-});
-
-function nextLabel() {
-  $("result").classList.add("hidden");
-  $("emptyResult").classList.remove("hidden");
-  $("emptyResult").textContent = "Listo para la siguiente etiqueta.";
-
-  currentRecord = null;
-  currentMatchRow = null;
 }
 
-/* Confirmar SÍ */
-$("yesBtn").addEventListener("click", () => {
-  if (!currentRecord?.stock || !workbook) return;
+/*
+  Presentación de candidatos.
+*/
 
-  const row = lookupStock(currentRecord.stock);
+function showCandidates(list,parsed){
 
-  if (row) {
-    const rr = mainSheet.getRow(row);
+  $("candidates").innerHTML="";
 
-    for (let c = 1; c <= mainSheet.columnCount; c++) {
-      rr.getCell(c).fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FF92D050" }
-      };
+  if(!list.length){
+
+    status(
+      "resultInfo",
+      "No se ha encontrado el artículo.\n"+
+      "P/N: "+parsed.pn+"\n"+
+      "STOCK-ID: "+parsed.stock,
+      "warn"
+    );
+
+    const button=document.createElement("button");
+
+    button.textContent="Añadir a ENCONTRADO FUERA STOCK";
+
+    button.onclick=()=>addUnknown(parsed);
+
+    $("candidates").appendChild(button);
+
+    return;
+  }
+
+  status(
+    "resultInfo",
+    "Se han encontrado "+list.length+
+    " coincidencia(s). Selecciona el artículo correcto.",
+    "good"
+  );
+
+  list.forEach(item=>{
+
+    const div=document.createElement("div");
+    div.className="candidate";
+
+    const title=document.createElement("strong");
+
+    title.textContent=
+      "P/N: "+(item.pn || "—")+
+      " | STOCK-ID: "+(item.stock || "—");
+
+    const detail=document.createElement("p");
+
+    detail.textContent=
+      "N.º serie: "+(item.serial || "—")+
+      " | Ubicación: "+(item.location || "—");
+
+    const description=document.createElement("p");
+
+    description.textContent=
+      "Descripción: "+(item.description || "—");
+
+    const match=document.createElement("p");
+    match.className="small";
+
+    match.textContent=
+      "Coincidencia: "+
+      [
+        item.pnMatch?"P/N":"",
+        item.stockMatch?"STOCK-ID":""
+      ].filter(Boolean).join(" + ");
+
+    const button=document.createElement("button");
+
+    button.textContent=
+      "Confirmar y marcar fila "+item.rowNum+" en verde";
+
+    button.onclick=()=>markFound(item);
+
+    div.append(title,detail,description,match,button);
+
+    $("candidates").appendChild(div);
+  });
+}
+
+/*
+  Búsqueda del código.
+*/
+
+function searchCode(raw){
+
+  if(!workbook || !worksheet || !headers){
+
+    status("resultInfo","Primero carga el Excel.","bad");
+    return;
+  }
+
+  const parsed=parseBarcode(raw);
+
+  if(!parsed.pn && !parsed.stock){
+
+    status("resultInfo","No se ha podido interpretar el código.","bad");
+    return;
+  }
+
+  $("manualCode").value=parsed.raw;
+
+  const candidates=findCandidates(parsed);
+
+  showCandidates(candidates,parsed);
+}
+
+$("searchBtn").addEventListener("click",()=>{
+  searchCode($("manualCode").value);
+});
+
+$("manualCode").addEventListener("keydown",e=>{
+  if(e.key==="Enter")searchCode(e.target.value);
+});
+
+/*
+  Marcar fila elegida en verde.
+*/
+
+function markFound(item){
+
+  const row=worksheet.getRow(item.rowNum);
+
+  row.eachCell({includeEmpty:true},cell=>{
+
+    cell.fill={
+      type:"pattern",
+      pattern:"solid",
+      fgColor:{argb:"FF92D050"}
+    };
+
+  });
+
+  status(
+    "resultInfo",
+    "Artículo confirmado. Fila "+item.rowNum+
+    " marcada en verde. Recuerda exportar el Excel.",
+    "good"
+  );
+
+  $("candidates").innerHTML="";
+}
+
+/*
+  Añadir artículos que no aparecen en el inventario.
+*/
+
+function addUnknown(parsed){
+
+  let ws=workbook.getWorksheet("ENCONTRADO FUERA STOCK");
+
+  if(!ws){
+
+    ws=workbook.addWorksheet("ENCONTRADO FUERA STOCK");
+
+    ws.addRow([
+      "P/N",
+      "STOCK-ID leído",
+      "Código de barras",
+      "Fecha"
+    ]);
+
+    ws.getRow(1).font={bold:true};
+  }
+
+  const key=normalize(parsed.pn)+"|"+normalize(parsed.stock);
+
+  let duplicate=false;
+
+  for(let r=2;r<=ws.rowCount;r++){
+
+    const existing=
+      normalize(cellText(ws.getRow(r).getCell(1)))+"|"+
+      normalize(cellText(ws.getRow(r).getCell(2)));
+
+    if(existing===key)duplicate=true;
+  }
+
+  if(!duplicate){
+
+    ws.addRow([
+      parsed.pn,
+      parsed.stock,
+      parsed.raw,
+      new Date().toLocaleString("es-ES")
+    ]);
+  }
+
+  status(
+    "resultInfo",
+    duplicate
+      ? "Este código ya estaba anotado."
+      : "Artículo añadido a ENCONTRADO FUERA STOCK.",
+    "good"
+  );
+
+  $("candidates").innerHTML="";
+}
+
+/*
+  Cámara y lector ZXing.
+*/
+
+async function stopCamera(){
+
+  try{
+    if(controls)controls.stop();
+  }catch(e){}
+
+  try{
+    if(reader)reader.reset();
+  }catch(e){}
+
+  const video=$("video");
+
+  if(video.srcObject){
+    video.srcObject.getTracks().forEach(track=>track.stop());
+    video.srcObject=null;
+  }
+
+  controls=null;
+  activeTrack=null;
+  torchOn=false;
+
+  $("startBtn").disabled=false;
+  $("stopBtn").disabled=true;
+  $("torchBtn").classList.add("hidden");
+}
+
+$("startBtn").addEventListener("click",async()=>{
+
+  if(!workbook){
+    status("scanStatus","Carga primero el Excel.","warn");
+    return;
+  }
+
+  try{
+
+    if(!window.ZXingBrowser){
+      throw new Error("No se ha cargado ZXing. Comprueba Internet.");
     }
 
-    rr.commit?.();
-    doneRows.add(row);
+    reader=new ZXingBrowser.BrowserMultiFormatReader();
 
-  } else {
-    recordUnknown(currentRecord);
+    status("scanStatus","Solicitando permiso para usar la cámara…");
+
+    controls=await reader.decodeFromVideoDevice(
+      undefined,
+      $("video"),
+      (result,error)=>{
+
+        if(result){
+
+          const code=result.getText();
+
+          $("manualCode").value=code;
+
+          searchCode(code);
+
+          stopCamera();
+
+          status(
+            "scanStatus",
+            "Código leído correctamente. Selecciona el artículo.",
+            "good"
+          );
+        }
+      }
+    );
+
+    $("startBtn").disabled=true;
+    $("stopBtn").disabled=false;
+
+    const video=$("video");
+
+    video.onloadedmetadata=()=>{
+
+      const stream=video.srcObject;
+
+      activeTrack=stream && stream.getVideoTracks()[0];
+
+      if(activeTrack && activeTrack.getCapabilities){
+
+        const caps=activeTrack.getCapabilities();
+
+        if(caps.torch){
+          $("torchBtn").classList.remove("hidden");
+        }
+      }
+    };
+
+    status(
+      "scanStatus",
+      "Cámara activa. Enfoca el código de barras.",
+      "good"
+    );
+
+  }catch(err){
+
+    status(
+      "scanStatus",
+      "No se pudo abrir la cámara: "+err.message+
+      "\nComprueba los permisos y que GitHub Pages utilice HTTPS.",
+      "bad"
+    );
   }
-
-  updateProgress();
-
-  setStatus("ocrStatus",
-    "Comprobación guardada. Puedes leer la siguiente etiqueta.",
-    "good");
-
-  nextLabel();
 });
 
-/* Confirmar NO */
-$("noBtn").addEventListener("click", () => {
-  if (!currentRecord) return;
-
-  setStatus("ocrStatus",
-    "Marcada como NO comprobada. Preparado para la siguiente etiqueta.",
-    "warn");
-
-  nextLabel();
+$("stopBtn").addEventListener("click",async()=>{
+  await stopCamera();
+  status("scanStatus","Cámara detenida.");
 });
 
-/* Exportar Excel */
-$("exportBtn").addEventListener("click", async () => {
-  if (!workbook) return;
+$("torchBtn").addEventListener("click",async()=>{
 
-  try {
-    getOrCreateUnknown();
+  if(!activeTrack)return;
 
-    const buffer = await workbook.xlsx.writeBuffer();
+  try{
 
-    const blob = new Blob([buffer], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    torchOn=!torchOn;
+
+    await activeTrack.applyConstraints({
+      advanced:[{torch:torchOn}]
     });
 
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
+    $("torchBtn").textContent=
+      torchOn?"Apagar linterna":"Encender linterna";
 
-    a.href = url;
-    a.download = "INVENTARIO_ACTUALIZADO.xlsx";
-    a.click();
+  }catch(error){
 
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    torchOn=false;
 
-    setStatus("fileStatus",
-      "Excel actualizado descargado. Ya puedes compartirlo por WhatsApp.",
-      "good");
-
-  } catch (e) {
-    setStatus("fileStatus",
-      "No se pudo exportar: " + e.message,
-      "bad");
+    status(
+      "scanStatus",
+      "El Samsung o el navegador no permiten controlar la linterna. Puedes continuar sin ella.",
+      "warn"
+    );
   }
 });
+
+/*
+  Exportar una copia del Excel.
+*/
+
+$("exportBtn").addEventListener("click",async()=>{
+
+  if(!workbook)return;
+
+  try{
+
+    const buffer=await workbook.xlsx.writeBuffer();
+
+    const blob=new Blob(
+      [buffer],
+      {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+    );
+
+    const url=URL.createObjectURL(blob);
+
+    const a=document.createElement("a");
+
+    a.href=url;
+    a.download=workbookName;
+    a.click();
+
+    setTimeout(()=>URL.revokeObjectURL(url),2000);
+
+    status(
+      "resultInfo",
+      "Excel actualizado descargado. Comprueba la carpeta Descargas.",
+      "good"
+    );
+
+  }catch(error){
+
+    status(
+      "resultInfo",
+      "Error al exportar: "+error.message,
+      "bad"
+    );
+  }
+});
+
+window.addEventListener("pagehide",stopCamera);
 
 })();
 </script>
