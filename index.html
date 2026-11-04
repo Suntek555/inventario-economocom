@@ -311,10 +311,10 @@ async function loadExcel(file) {
 
     await newWorkbook.xlsx.load(data);
 
-    const sheet = newWorkbook.getWorksheet("Hoja1");
+    const sheet = newWorkbook.getWorksheet("GBS Inventario por Ubicacion");
 
     if (!sheet) {
-      throw new Error('No existe una hoja llamada "Hoja1".');
+      throw new Error('No existe una hoja llamada "GBS Inventario por Ubicacion".');
     }
 
     workbook = newWorkbook;
@@ -329,7 +329,7 @@ async function loadExcel(file) {
     $("exportButton").disabled = false;
 
     $("fileStatus").textContent =
-      "Excel cargado correctamente. Hoja: Hoja1. Registros: " +
+      "Excel cargado correctamente. Hoja: GBS Inventario por Ubicacion. Registros: " +
       Math.max(0, sheet.rowCount - 1);
 
     setStatus("Archivo preparado. Puedes empezar a escanear.", true);
