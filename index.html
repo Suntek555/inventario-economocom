@@ -132,7 +132,7 @@ let statusColumn = 0;
 let baseColumnCount = 0;
 
 const OUT_SHEET = "ENCONTRADO FUERA STOCK";
-const STATUS_HEADER = "_INVENTARIADO";
+const STATUS_HEADER = "COLUMNA1";
 const GREEN = "FF92D050";
 
 // Normalizar encabezados y códigos
@@ -183,7 +183,7 @@ function displayValue(row, column) {
   return cellText(row.getCell(column));
 }
 
-// Detectar columnas de tu Excel
+// Detectar columnas del Excel
 function detectHeaders(sheet) {
   const found = {};
 
@@ -218,7 +218,46 @@ function checkColumns() {
   }
 }
 
-// Detectar si una celda tiene el verde utilizado por la aplicación
+// Buscar Columna1
+function prepareStatusColumn(sheet) {
+  const header = sheet.getRow(1);
+  let foundColumn = 0;
+
+  header.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+    if (normalize(cellText(cell)) === STATUS_HEADER) {
+      foundColumn = colNumber;
+    }
+  });
+
+  if (!foundColumn) {
+    throw new Error(
+      'No encuentro la columna "Columna1" en la primera fila del Excel.'
+    );
+  }
+
+  statusColumn = foundColumn;
+
+  // Incluir todas las columnas originales, también Columna2.
+  // No se añade ninguna columna nueva.
+  baseColumnCount = Math.max(sheet.columnCount, statusColumn);
+
+  sheet.getColumn(statusColumn).hidden = true;
+
+  // Restaurar el verde según el SI guardado en Columna1.
+  for (let r = 2; r <= sheet.rowCount; r++) {
+    const row = sheet.getRow(r);
+    const marked =
+      normalize(cellText(row.getCell(statusColumn))) === "SI";
+
+    if (marked) {
+      paintRowGreen(row);
+    } else {
+      removeOurGreen(row);
+    }
+  }
+}
+
+// Comprobar si el verde pertenece a la aplicación
 function isOurGreen(cell) {
   const fill = cell.fill;
 
@@ -228,7 +267,7 @@ function isOurGreen(cell) {
   return color === GREEN;
 }
 
-// Quitar exclusivamente nuestro verde, sin tocar otros formatos
+// Quitar únicamente nuestro verde
 function removeOurGreen(row) {
   for (let c = 1; c <= baseColumnCount; c++) {
     const cell = row.getCell(c);
@@ -242,7 +281,7 @@ function removeOurGreen(row) {
   }
 }
 
-// Aplicar verde únicamente a la fila indicada
+// Pintar TODAS las columnas de la fila
 function paintRowGreen(row) {
   for (let c = 1; c <= baseColumnCount; c++) {
     row.getCell(c).fill = {
@@ -250,44 +289,6 @@ function paintRowGreen(row) {
       pattern: "solid",
       fgColor: { argb: GREEN }
     };
-  }
-}
-
-// Preparar columna de control oculta.
-// Esta columna permite recordar qué artículos se han contado.
-function prepareStatusColumn(sheet) {
-  const header = sheet.getRow(1);
-  let foundColumn = 0;
-
-  header.eachCell((cell, colNumber) => {
-    if (normalize(cellText(cell)) === STATUS_HEADER) {
-      foundColumn = colNumber;
-    }
-  });
-
-  if (foundColumn) {
-    statusColumn = foundColumn;
-    baseColumnCount = statusColumn - 1;
-  } else {
-    baseColumnCount = sheet.columnCount;
-    statusColumn = baseColumnCount + 1;
-
-    sheet.getCell(1, statusColumn).value = STATUS_HEADER;
-  }
-
-  sheet.getColumn(statusColumn).hidden = true;
-
-  // El estado guardado en la columna oculta es la referencia.
-  // Si una fila no está marcada como SI, no debe quedar verde.
-  for (let r = 2; r <= sheet.rowCount; r++) {
-    const row = sheet.getRow(r);
-    const marked = normalize(cellText(row.getCell(statusColumn))) === "SI";
-
-    if (marked) {
-      paintRowGreen(row);
-    } else {
-      removeOurGreen(row);
-    }
   }
 }
 
@@ -321,7 +322,6 @@ async function loadExcel(file) {
 
     columns = detectHeaders(sheet);
     checkColumns();
-
     prepareStatusColumn(sheet);
 
     $("searchButton").disabled = false;
@@ -332,11 +332,7 @@ async function loadExcel(file) {
       "Excel cargado correctamente. Hoja: Hoja1. Registros: " +
       Math.max(0, sheet.rowCount - 1);
 
-    setStatus(
-      "Archivo preparado. Puedes empezar a escanear.",
-      true
-    );
-
+    setStatus("Archivo preparado. Puedes empezar a escanear.", true);
     $("results").textContent = "Esperando un código de barras.";
 
   } catch (error) {
@@ -344,7 +340,9 @@ async function loadExcel(file) {
     inventorySheet = null;
     columns = {};
 
-    $("fileStatus").textContent = "Error al cargar el Excel: " + error.message;
+    $("fileStatus").textContent =
+      "Error al cargar el Excel: " + error.message;
+
     setStatus("No se ha podido cargar el archivo.");
     console.error(error);
   }
@@ -460,12 +458,14 @@ function showCandidates(candidates, raw) {
   });
 }
 
-// Confirmar artículo.
-// Solo cambia la fila seleccionada y su marca de control.
+// Confirmar artículo
 function confirmCandidate(candidate) {
   const row = inventorySheet.getRow(candidate.rowNumber);
 
+  // Columna1 es el registro permanente de inventario.
   row.getCell(statusColumn).value = "SI";
+
+  // Pintar desde la primera hasta la última columna original.
   paintRowGreen(row);
 
   setStatus(
@@ -510,7 +510,8 @@ function addOutsideStock(code) {
   }
 
   setStatus("Artículo añadido a ENCONTRADO FUERA STOCK.", true);
-  $("results").textContent = "Registro añadido. Puedes seguir escaneando.";
+  $("results").textContent =
+    "Registro añadido. Puedes seguir escaneando.";
 }
 
 // Buscar código
@@ -639,8 +640,7 @@ async function exportExcel() {
   try {
     setStatus("Preparando Excel actualizado...");
 
-    // Antes de exportar, aplicar el color solo a las filas
-    // que tienen SI en la columna oculta de control.
+    // Restaurar el verde según el SI de Columna1.
     for (let r = 2; r <= inventorySheet.rowCount; r++) {
       const row = inventorySheet.getRow(r);
       const marked =
@@ -652,6 +652,9 @@ async function exportExcel() {
         removeOurGreen(row);
       }
     }
+
+    // Mantener Columna1 oculta en el archivo descargado.
+    inventorySheet.getColumn(statusColumn).hidden = true;
 
     const buffer = await workbook.xlsx.writeBuffer({
       useStyles: true,
