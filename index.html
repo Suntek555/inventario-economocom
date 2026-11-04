@@ -17,6 +17,8 @@ body{
   margin:0;
   padding:15px;
   color:#222;
+  max-width:850px;
+  margin:auto;
 }
 h1{font-size:23px}
 .panel{
@@ -169,46 +171,45 @@ function status(id,text,type=""){
   $(id).className="status "+type;
 }
 
-/*
-  Convierte:
-  *05Y1J9%S250037
+/* 
+   CONVERSIÓN DEL CÓDIGO DE BARRAS
 
-  En:
-  P/N = 05Y1J9
-  STOCK-ID = S250037
+   Original:
+   *05Y1J9%S250037
+
+   Resultado:
+   P/N = 05Y1J9
+   STOCK-ID = S250037
+
+   Se eliminan los asteriscos y porcentajes.
 */
 
 function parseBarcode(raw){
 
-  const value=String(raw || "").trim().toUpperCase();
+  const value=String(raw || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s/g,"");
 
-  let pn="";
-  let stock="";
+  const clean=value.replace(/^\*+|\*+$/g,"");
 
-  const match=value.match(/^\*?([^%|;]+)[%|;](.+?)\*?$/);
+  const parts=clean.split("%");
 
-  if(match){
+  const pn=(parts[0] || "")
+    .replace(/[^A-Z0-9]/g,"");
 
-    pn=match[1].replace(/^\*/,"").trim();
-    stock=match[2].replace(/\*$/,"").trim();
+  const stock=(parts[1] || "")
+    .replace(/[^A-Z0-9]/g,"");
 
-  }else{
-
-    const clean=value.replace(/^\*|\*$/g,"").trim();
-
-    if(/^S/.test(clean)){
-      stock=clean;
-    }else{
-      pn=clean;
-    }
-  }
-
-  return {raw:value,pn,stock};
+  return {
+    raw:value,
+    pn:pn,
+    stock:stock
+  };
 }
 
 /*
-  Detecta los encabezados del Excel.
-  Busca nombres habituales para las columnas.
+  DETECCIÓN DE COLUMNAS DEL EXCEL
 */
 
 function detectHeaders(ws){
@@ -286,7 +287,75 @@ function getCell(row,col){
 }
 
 /*
-  Cargar el Excel localmente.
+  BÚSQUEDA DE COINCIDENCIAS
+
+  P/N: coincidencia exacta.
+  STOCK-ID: coincidencia parcial.
+
+  Ejemplo:
+  S250037 encuentra S25003774.
+*/
+
+function findCandidates(parsed){
+
+  const cols=headers.cols;
+  const found=[];
+
+  const searchPN=normalize(parsed.pn);
+  const searchStock=normalize(parsed.stock);
+
+  worksheet.eachRow((row,rowNum)=>{
+
+    if(rowNum<=headers.row)return;
+
+    const pn=normalize(getCell(row,cols.pn));
+    const stock=normalize(getCell(row,cols.stock));
+
+    const pnMatch=
+      searchPN && pn===searchPN;
+
+    const stockMatch=
+      searchStock && stock.includes(searchStock);
+
+    if(pnMatch || stockMatch){
+
+      found.push({
+
+        rowNum,
+
+        pn:getCell(row,cols.pn),
+
+        stock:getCell(row,cols.stock),
+
+        serial:getCell(row,cols.serial),
+
+        description:getCell(row,cols.description),
+
+        location:getCell(row,cols.location),
+
+        pnMatch:!!pnMatch,
+
+        stockMatch:!!stockMatch
+
+      });
+    }
+
+  });
+
+  /*
+    Primero los que coinciden en ambos campos.
+  */
+
+  found.sort((a,b)=>
+    (Number(b.pnMatch)+Number(b.stockMatch))-
+    (Number(a.pnMatch)+Number(a.stockMatch))
+  );
+
+  return found;
+}
+
+/*
+  CARGAR EXCEL
 */
 
 $("file").addEventListener("change",async e=>{
@@ -314,18 +383,22 @@ $("file").addEventListener("change",async e=>{
 
     if(!headers){
       throw new Error(
-        "No se han encontrado las columnas P/N o STOCK-ID."
+        "No se han encontrado los encabezados P/N o STOCK-ID."
       );
     }
 
     const cols=headers.cols;
 
-    const info=
+    let info=
       "Excel cargado correctamente.\n"+
       "Hoja: "+worksheet.name+"\n"+
       "Fila de encabezados: "+headers.row+"\n"+
       "P/N: columna "+(cols.pn || "NO DETECTADA")+"\n"+
       "STOCK-ID: columna "+(cols.stock || "NO DETECTADA");
+
+    if(!cols.pn || !cols.stock){
+      info+="\nATENCIÓN: falta detectar una de las dos columnas.";
+    }
 
     $("fileStatus").textContent=info;
 
@@ -333,7 +406,7 @@ $("file").addEventListener("change",async e=>{
 
     status(
       "scanStatus",
-      "Excel preparado. Ya puedes escanear o introducir un código.",
+      "Excel preparado. Puedes escanear o introducir el código.",
       "good"
     );
 
@@ -348,56 +421,7 @@ $("file").addEventListener("change",async e=>{
 });
 
 /*
-  Búsqueda parcial en las dos columnas.
-*/
-
-function findCandidates(parsed){
-
-  const cols=headers.cols;
-  const found=[];
-
-  worksheet.eachRow((row,rowNum)=>{
-
-    if(rowNum<=headers.row)return;
-
-    const pn=getCell(row,cols.pn);
-    const stock=getCell(row,cols.stock);
-
-    const p=normalize(pn);
-    const s=normalize(stock);
-
-    const qpn=normalize(parsed.pn);
-    const qs=normalize(parsed.stock);
-
-    const pnMatch=
-      qpn && p && (p===qpn || p.includes(qpn) || qpn.includes(p));
-
-    const stockMatch=
-      qs && s && (s.includes(qs) || qs.includes(s));
-
-    if(pnMatch || stockMatch){
-
-      found.push({
-        rowNum,
-        pn,
-        stock,
-        serial:getCell(row,cols.serial),
-        description:getCell(row,cols.description),
-        location:getCell(row,cols.location),
-        pnMatch:!!pnMatch,
-        stockMatch:!!stockMatch
-      });
-    }
-  });
-
-  return found.sort((a,b)=>
-    (Number(b.pnMatch)+Number(b.stockMatch))-
-    (Number(a.pnMatch)+Number(a.stockMatch))
-  );
-}
-
-/*
-  Presentación de candidatos.
+  MOSTRAR CANDIDATOS
 */
 
 function showCandidates(list,parsed){
@@ -427,7 +451,7 @@ function showCandidates(list,parsed){
 
   status(
     "resultInfo",
-    "Se han encontrado "+list.length+
+    "Encontradas "+list.length+
     " coincidencia(s). Selecciona el artículo correcto.",
     "good"
   );
@@ -460,8 +484,8 @@ function showCandidates(list,parsed){
     match.textContent=
       "Coincidencia: "+
       [
-        item.pnMatch?"P/N":"",
-        item.stockMatch?"STOCK-ID":""
+        item.pnMatch?"P/N exacto":"",
+        item.stockMatch?"STOCK-ID parcial":""
       ].filter(Boolean).join(" + ");
 
     const button=document.createElement("button");
@@ -478,7 +502,7 @@ function showCandidates(list,parsed){
 }
 
 /*
-  Búsqueda del código.
+  BUSCAR EN EL EXCEL
 */
 
 function searchCode(raw){
@@ -513,7 +537,7 @@ $("manualCode").addEventListener("keydown",e=>{
 });
 
 /*
-  Marcar fila elegida en verde.
+  MARCAR FILA SELECCIONADA EN VERDE
 */
 
 function markFound(item){
@@ -533,7 +557,7 @@ function markFound(item){
   status(
     "resultInfo",
     "Artículo confirmado. Fila "+item.rowNum+
-    " marcada en verde. Recuerda exportar el Excel.",
+    " marcada en verde. Exporta el Excel para guardar los cambios.",
     "good"
   );
 
@@ -541,7 +565,7 @@ function markFound(item){
 }
 
 /*
-  Añadir artículos que no aparecen en el inventario.
+  AÑADIR ARTÍCULO NO ENCONTRADO
 */
 
 function addUnknown(parsed){
@@ -597,7 +621,7 @@ function addUnknown(parsed){
 }
 
 /*
-  Cámara y lector ZXing.
+  CÁMARA ZXING
 */
 
 async function stopCamera(){
@@ -738,7 +762,7 @@ $("torchBtn").addEventListener("click",async()=>{
 });
 
 /*
-  Exportar una copia del Excel.
+  EXPORTAR COPIA DEL EXCEL
 */
 
 $("exportBtn").addEventListener("click",async()=>{
