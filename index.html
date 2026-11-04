@@ -400,25 +400,32 @@
     });
   }
 
-  function confirmCandidate(candidate) {
-    const row = candidate.row;
+  
+function confirmCandidate(candidate) {
+  const row = inventorySheet.getRow(candidate.rowNumber);
 
-    for (let c = 1; c <= inventorySheet.columnCount; c++) {
-      row.getCell(c).fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FF92D050" }
-      };
-    }
+  // Marcar únicamente la fila seleccionada
+  for (let c = 1; c <= inventorySheet.columnCount; c++) {
+    const cell = row.getCell(c);
 
-    row.commit();
-
-    selectedCandidate = candidate;
-    setStatus(
-      "Artículo confirmado. Fila " + candidate.rowNumber +
-      " marcada en verde. Recuerda descargar el Excel actualizado."
-    );
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF92D050" }
+    };
   }
+
+  row.commit();
+
+  selectedCandidate = candidate;
+
+  setStatus(
+    "Artículo confirmado. Solo la fila " +
+    candidate.rowNumber +
+    " ha sido marcada en verde."
+  );
+}
+
 
   function addOutsideStock(code) {
     if (!workbook || !inventorySheet) return;
