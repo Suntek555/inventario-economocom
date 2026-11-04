@@ -108,8 +108,9 @@ input { border: 1px solid #bbb; background: white; }
 <div class="panel">
   <strong>5. Guardar inventario actualizado</strong>
   <p class="small">
-    Descarga el Excel al terminar. Las marcas de los artículos
-    inventariados se conservarán para el siguiente día.
+    La columna H mostrará SI en los artículos inventariados.
+    Solo la celda H de cada artículo confirmado aparecerá en verde.
+    La descarga incluirá fecha y hora en el nombre del archivo.
   </p>
   <button id="exportButton" class="green" disabled>
     Descargar Excel actualizado
@@ -212,6 +213,7 @@ function detectHeaders(sheet) {
 
 function checkColumns() {
   const missing = [];
+
   if (!columns.pn) missing.push("Nº producto");
   if (!columns.stock) missing.push("Nº serie");
   if (!columns.warehouse) missing.push("Cód. almacén");
@@ -223,7 +225,36 @@ function checkColumns() {
   }
 }
 
-// Preparar columna1 y localizar el rango que se coloreará
+// Comprobar si una celda tiene nuestro verde
+function isOurGreen(cell) {
+  const fill = cell.fill;
+
+  if (!fill || !fill.fgColor) return false;
+
+  const color = String(fill.fgColor.argb || "").toUpperCase();
+  return color === GREEN;
+}
+
+// Quitar únicamente nuestro verde de una celda
+function removeOurGreen(cell) {
+  if (isOurGreen(cell)) {
+    cell.fill = {
+      type: "pattern",
+      pattern: "none"
+    };
+  }
+}
+
+// Pintar únicamente la celda H
+function paintStatusGreen(cell) {
+  cell.fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: GREEN }
+  };
+}
+
+// Preparar columna1
 function prepareStatusColumn(sheet) {
   const header = sheet.getRow(1);
   let foundColumn = 0;
@@ -242,63 +273,31 @@ function prepareStatusColumn(sheet) {
 
   statusColumn = foundColumn;
 
-  // El rango verde termina justo antes de Columna1.
-  // Columna1 y Columna2 nunca se colorean.
+  // La columna H es la columna de control.
   firstInventoryColumn = 1;
   lastInventoryColumn = statusColumn - 1;
 
-  if (lastInventoryColumn < 1) {
-    throw new Error("La posición de Columna1 no es correcta.");
+  if (statusColumn !== 8) {
+    throw new Error(
+      'Columna1 debería estar en la columna H (posición 8), pero se encuentra en la columna ' +
+      statusColumn + '.'
+    );
   }
 
-  sheet.getColumn(statusColumn).hidden = true;
+  // Mostrar Columna1 al abrir el Excel.
+  sheet.getColumn(statusColumn).hidden = false;
 
-  // Restaurar el verde según el SI guardado en Columna1.
+  // Restaurar las marcas según los SI guardados.
   for (let r = 2; r <= sheet.rowCount; r++) {
     const row = sheet.getRow(r);
-    const marked =
-      normalize(cellText(row.getCell(statusColumn))) === "SI";
+    const statusCell = row.getCell(statusColumn);
+    const marked = normalize(cellText(statusCell)) === "SI";
 
     if (marked) {
-      paintRowGreen(row);
+      paintStatusGreen(statusCell);
     } else {
-      removeOurGreen(row);
+      removeOurGreen(statusCell);
     }
-  }
-}
-
-// Comprobar si el verde pertenece a la aplicación
-function isOurGreen(cell) {
-  const fill = cell.fill;
-
-  if (!fill || !fill.fgColor) return false;
-
-  const color = String(fill.fgColor.argb || "").toUpperCase();
-  return color === GREEN;
-}
-
-// Quitar únicamente nuestro verde en las columnas de inventario
-function removeOurGreen(row) {
-  for (let c = firstInventoryColumn; c <= lastInventoryColumn; c++) {
-    const cell = row.getCell(c);
-
-    if (isOurGreen(cell)) {
-      cell.fill = {
-        type: "pattern",
-        pattern: "none"
-      };
-    }
-  }
-}
-
-// Pintar solo desde Cód. almacén hasta Nº documento
-function paintRowGreen(row) {
-  for (let c = firstInventoryColumn; c <= lastInventoryColumn; c++) {
-    row.getCell(c).fill = {
-      type: "pattern",
-      pattern: "solid",
-      fgColor: { argb: GREEN }
-    };
   }
 }
 
@@ -466,7 +465,7 @@ function showCandidates(candidates, raw) {
       (candidate.stockMatch ? "STOCK-ID" : "");
 
     const confirm = document.createElement("button");
-    confirm.textContent = "Confirmar artículo y marcar en verde";
+    confirm.textContent = "Confirmar artículo";
     confirm.className = "green";
     confirm.onclick = () => confirmCandidate(candidate);
 
@@ -478,16 +477,17 @@ function showCandidates(candidates, raw) {
 // Confirmar artículo
 function confirmCandidate(candidate) {
   const row = inventorySheet.getRow(candidate.rowNumber);
+  const statusCell = row.getCell(statusColumn);
 
-  // Guardar SI en Columna1
-  row.getCell(statusColumn).value = "SI";
+  // Guardar SI en Columna1.
+  statusCell.value = "SI";
 
-  // Colorear solo las columnas de inventario
-  paintRowGreen(row);
+  // Colorear únicamente la celda H.
+  paintStatusGreen(statusCell);
 
   setStatus(
     "Artículo confirmado. Fila " + candidate.rowNumber +
-    " marcada. Los artículos anteriores se conservan.",
+    " marcada en Columna1. Los artículos anteriores se conservan.",
     true
   );
 }
@@ -647,6 +647,21 @@ async function toggleTorch() {
   }
 }
 
+// Crear nombre de archivo con fecha y hora local
+function getExportFileName() {
+  const now = new Date();
+
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const hours = String(now.getHours()).padStart(2, "0");
+  const minutes = String(now.getMinutes()).padStart(2, "0");
+
+  return "INVENTARIO_ECONOCOM_" +
+    year + "-" + month + "-" + day +
+    "_" + hours + "-" + minutes + ".xlsx";
+}
+
 // Exportar Excel
 async function exportExcel() {
   if (!workbook || !inventorySheet) {
@@ -655,28 +670,28 @@ async function exportExcel() {
   }
 
   try {
+    $("exportButton").disabled = true;
     setStatus("Preparando Excel actualizado...");
 
-    // Restaurar los verdes según Columna1.
+    // Mantener visible la columna H.
+    inventorySheet.getColumn(statusColumn).hidden = false;
+
+    // Revisar todos los SI y colorear exclusivamente H.
     for (let r = 2; r <= inventorySheet.rowCount; r++) {
       const row = inventorySheet.getRow(r);
-      const marked =
-        normalize(cellText(row.getCell(statusColumn))) === "SI";
+      const statusCell = row.getCell(statusColumn);
+
+      const marked = normalize(cellText(statusCell)) === "SI";
 
       if (marked) {
-        paintRowGreen(row);
+        paintStatusGreen(statusCell);
       } else {
-        removeOurGreen(row);
+        removeOurGreen(statusCell);
       }
     }
 
-    // Mantener Columna1 oculta
-    inventorySheet.getColumn(statusColumn).hidden = true;
-
-    const buffer = await workbook.xlsx.writeBuffer({
-      useStyles: true,
-      useSharedStrings: true
-    });
+    // Generar el archivo Excel.
+    const buffer = await workbook.xlsx.writeBuffer();
 
     const blob = new Blob(
       [buffer],
@@ -689,22 +704,25 @@ async function exportExcel() {
     const a = document.createElement("a");
 
     a.href = url;
-    a.download = "INVENTARIO_ECONOCOM_ACTUALIZADO.xlsx";
+    a.download = getExportFileName();
 
     document.body.appendChild(a);
     a.click();
     a.remove();
 
-    setTimeout(() => URL.revokeObjectURL(url), 3000);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
 
     setStatus(
-      "Excel descargado correctamente. Las marcas de inventario se conservan.",
+      "Excel descargado correctamente. Columna H visible y marcas SI en verde.",
       true
     );
 
   } catch (error) {
     setStatus("Error al exportar: " + error.message);
     console.error(error);
+
+  } finally {
+    $("exportButton").disabled = false;
   }
 }
 
