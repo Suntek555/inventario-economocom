@@ -129,11 +129,13 @@ let cameraControls = null;
 let torchOn = false;
 
 let statusColumn = 0;
-let baseColumnCount = 0;
+let firstInventoryColumn = 1;
+let lastInventoryColumn = 0;
 
 const OUT_SHEET = "ENCONTRADO FUERA STOCK";
 const STATUS_HEADER = "COLUMNA1";
 const GREEN = "FF92D050";
+const SHEET_NAME = "GBS Inventario por Ubicacion";
 
 // Normalizar encabezados y códigos
 function normalize(value) {
@@ -195,7 +197,7 @@ function detectHeaders(sheet) {
     warehouse: ["CODALMACEN", "CODIGOALMACEN", "ALMACEN"]
   };
 
-  sheet.getRow(1).eachCell((cell, colNumber) => {
+  sheet.getRow(1).eachCell({ includeEmpty: true }, (cell, colNumber) => {
     const name = normalize(cellText(cell));
 
     for (const field of Object.keys(aliases)) {
@@ -212,13 +214,16 @@ function checkColumns() {
   const missing = [];
   if (!columns.pn) missing.push("Nº producto");
   if (!columns.stock) missing.push("Nº serie");
+  if (!columns.warehouse) missing.push("Cód. almacén");
+  if (!columns.location) missing.push("No. estant./ubic.");
+  if (!columns.description) missing.push("Description");
 
   if (missing.length) {
     throw new Error("No encuentro las columnas: " + missing.join(", "));
   }
 }
 
-// Buscar Columna1
+// Preparar columna1 y localizar el rango que se coloreará
 function prepareStatusColumn(sheet) {
   const header = sheet.getRow(1);
   let foundColumn = 0;
@@ -231,15 +236,20 @@ function prepareStatusColumn(sheet) {
 
   if (!foundColumn) {
     throw new Error(
-      'No encuentro la columna "Columna1" en la primera fila del Excel.'
+      'No encuentro la columna "Columna1" en la hoja "' + SHEET_NAME + '".'
     );
   }
 
   statusColumn = foundColumn;
 
-  // Incluir todas las columnas originales, también Columna2.
-  // No se añade ninguna columna nueva.
-  baseColumnCount = Math.max(sheet.columnCount, statusColumn);
+  // El rango verde termina justo antes de Columna1.
+  // Columna1 y Columna2 nunca se colorean.
+  firstInventoryColumn = 1;
+  lastInventoryColumn = statusColumn - 1;
+
+  if (lastInventoryColumn < 1) {
+    throw new Error("La posición de Columna1 no es correcta.");
+  }
 
   sheet.getColumn(statusColumn).hidden = true;
 
@@ -267,9 +277,9 @@ function isOurGreen(cell) {
   return color === GREEN;
 }
 
-// Quitar únicamente nuestro verde
+// Quitar únicamente nuestro verde en las columnas de inventario
 function removeOurGreen(row) {
-  for (let c = 1; c <= baseColumnCount; c++) {
+  for (let c = firstInventoryColumn; c <= lastInventoryColumn; c++) {
     const cell = row.getCell(c);
 
     if (isOurGreen(cell)) {
@@ -281,9 +291,9 @@ function removeOurGreen(row) {
   }
 }
 
-// Pintar TODAS las columnas de la fila
+// Pintar solo desde Cód. almacén hasta Nº documento
 function paintRowGreen(row) {
-  for (let c = 1; c <= baseColumnCount; c++) {
+  for (let c = firstInventoryColumn; c <= lastInventoryColumn; c++) {
     row.getCell(c).fill = {
       type: "pattern",
       pattern: "solid",
@@ -311,10 +321,13 @@ async function loadExcel(file) {
 
     await newWorkbook.xlsx.load(data);
 
-    const sheet = newWorkbook.getWorksheet("GBS Inventario por Ubicacion");
+    const sheet = newWorkbook.getWorksheet(SHEET_NAME);
 
     if (!sheet) {
-      throw new Error('No existe una hoja llamada "GBS Inventario por Ubicacion".');
+      throw new Error(
+        'No existe una hoja llamada "' + SHEET_NAME +
+        '". Comprueba el nombre exacto de la pestaña del Excel.'
+      );
     }
 
     workbook = newWorkbook;
@@ -329,8 +342,8 @@ async function loadExcel(file) {
     $("exportButton").disabled = false;
 
     $("fileStatus").textContent =
-      "Excel cargado correctamente. Hoja: GBS Inventario por Ubicacion. Registros: " +
-      Math.max(0, sheet.rowCount - 1);
+      "Excel cargado correctamente. Hoja: " + SHEET_NAME +
+      ". Registros: " + Math.max(0, sheet.rowCount - 1);
 
     setStatus("Archivo preparado. Puedes empezar a escanear.", true);
     $("results").textContent = "Esperando un código de barras.";
@@ -339,6 +352,10 @@ async function loadExcel(file) {
     workbook = null;
     inventorySheet = null;
     columns = {};
+
+    $("searchButton").disabled = true;
+    $("startCamera").disabled = true;
+    $("exportButton").disabled = true;
 
     $("fileStatus").textContent =
       "Error al cargar el Excel: " + error.message;
@@ -462,10 +479,10 @@ function showCandidates(candidates, raw) {
 function confirmCandidate(candidate) {
   const row = inventorySheet.getRow(candidate.rowNumber);
 
-  // Columna1 es el registro permanente de inventario.
+  // Guardar SI en Columna1
   row.getCell(statusColumn).value = "SI";
 
-  // Pintar desde la primera hasta la última columna original.
+  // Colorear solo las columnas de inventario
   paintRowGreen(row);
 
   setStatus(
@@ -483,7 +500,7 @@ function addOutsideStock(code) {
     sheet = workbook.addWorksheet(OUT_SHEET);
 
     const headers = [];
-    for (let c = 1; c <= baseColumnCount; c++) {
+    for (let c = 1; c <= lastInventoryColumn; c++) {
       headers.push(inventorySheet.getRow(1).getCell(c).value);
     }
 
@@ -491,7 +508,7 @@ function addOutsideStock(code) {
   }
 
   const outColumns = detectHeaders(sheet);
-  const values = new Array(baseColumnCount).fill(null);
+  const values = new Array(lastInventoryColumn).fill(null);
 
   if (outColumns.pn) values[outColumns.pn - 1] = code.pn;
   if (outColumns.stock) values[outColumns.stock - 1] = code.stock;
@@ -501,7 +518,7 @@ function addOutsideStock(code) {
 
   const newRow = sheet.addRow(values);
 
-  for (let c = 1; c <= baseColumnCount; c++) {
+  for (let c = 1; c <= lastInventoryColumn; c++) {
     newRow.getCell(c).fill = {
       type: "pattern",
       pattern: "solid",
@@ -640,7 +657,7 @@ async function exportExcel() {
   try {
     setStatus("Preparando Excel actualizado...");
 
-    // Restaurar el verde según el SI de Columna1.
+    // Restaurar los verdes según Columna1.
     for (let r = 2; r <= inventorySheet.rowCount; r++) {
       const row = inventorySheet.getRow(r);
       const marked =
@@ -653,7 +670,7 @@ async function exportExcel() {
       }
     }
 
-    // Mantener Columna1 oculta en el archivo descargado.
+    // Mantener Columna1 oculta
     inventorySheet.getColumn(statusColumn).hidden = true;
 
     const buffer = await workbook.xlsx.writeBuffer({
