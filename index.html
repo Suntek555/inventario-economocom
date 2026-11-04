@@ -10,81 +10,67 @@
 <script src="https://unpkg.com/@zxing/browser@0.1.5/umd/index.min.js"></script>
 
 <style>
-  body {
-    font-family: Arial, sans-serif;
-    margin: 0;
-    padding: 16px;
-    background: #f2f4f7;
-    color: #222;
-  }
-
-  h2 { margin-top: 0; }
-
-  .panel {
-    background: white;
-    padding: 16px;
-    margin-bottom: 14px;
-    border-radius: 10px;
-    box-shadow: 0 1px 5px #0002;
-  }
-
-  button, input {
-    box-sizing: border-box;
-    width: 100%;
-    padding: 12px;
-    margin-top: 8px;
-    border-radius: 7px;
-    font-size: 16px;
-  }
-
-  button {
-    border: 0;
-    background: #1557a0;
-    color: white;
-    font-weight: bold;
-  }
-
-  button:disabled { opacity: .5; }
-  button.secondary { background: #555; }
-  button.green { background: #218838; }
-
-  input {
-    border: 1px solid #bbb;
-    background: white;
-  }
-
-  #video {
-    width: 100%;
-    max-height: 300px;
-    background: #111;
-    border-radius: 8px;
-    margin-top: 10px;
-  }
-
-  #status {
-    padding: 12px;
-    border-radius: 7px;
-    background: #e9ecef;
-    margin-top: 10px;
-    overflow-wrap: anywhere;
-  }
-
-  .candidate {
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    padding: 12px;
-    margin-top: 10px;
-    background: #fff;
-  }
-
-  .candidate p { margin: 5px 0; }
-  .small { font-size: 13px; color: #555; }
-  .hidden { display: none; }
-
-  .success {
-    background: #d4edda !important;
-    color: #155724;
-  }
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 16px;
+  background: #f2f4f7;
+  color: #222;
+}
+h2 { margin-top: 0; }
+.panel {
+  background: white;
+  padding: 16px;
+  margin-bottom: 14px;
+  border-radius: 10px;
+  box-shadow: 0 1px 5px #0002;
+}
+button, input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 12px;
+  margin-top: 8px;
+  border-radius: 7px;
+  font-size: 16px;
+}
+button {
+  border: 0;
+  background: #1557a0;
+  color: white;
+  font-weight: bold;
+}
+button:disabled { opacity: .5; }
+button.secondary { background: #555; }
+button.green { background: #218838; }
+input { border: 1px solid #bbb; background: white; }
+#video {
+  width: 100%;
+  max-height: 300px;
+  background: #111;
+  border-radius: 8px;
+  margin-top: 10px;
+}
+#status {
+  padding: 12px;
+  border-radius: 7px;
+  background: #e9ecef;
+  margin-top: 10px;
+  overflow-wrap: anywhere;
+}
+.candidate {
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 10px;
+  background: white;
+}
+.candidate p { margin: 5px 0; }
+.small { font-size: 13px; color: #555; }
+.hidden { display: none; }
+.success {
+  background: #d4edda !important;
+  color: #155724;
+}
 </style>
 </head>
 
@@ -101,24 +87,16 @@
 <div class="panel">
   <strong>2. Escanear código de barras</strong>
   <video id="video" playsinline muted class="hidden"></video>
-
   <button id="startCamera" disabled>Abrir cámara</button>
   <button id="stopCamera" class="secondary hidden">Detener cámara</button>
   <button id="torchButton" class="secondary hidden">Encender linterna</button>
-
-  <p class="small">
-    Si la linterna no funciona desde el navegador, puedes escanear
-    utilizando la iluminación ambiental.
-  </p>
+  <p class="small">Si la linterna no funciona, utiliza iluminación ambiental.</p>
 </div>
 
 <div class="panel">
   <strong>3. Buscar código manualmente</strong>
-  <input id="barcodeInput" type="text"
-         placeholder="Ejemplo: *05Y1J9%S250037">
-
+  <input id="barcodeInput" placeholder="Ejemplo: *05Y1J9%S250037">
   <button id="searchButton" disabled>Buscar en Excel</button>
-
   <div id="status">Primero carga el archivo Excel.</div>
 </div>
 
@@ -130,8 +108,8 @@
 <div class="panel">
   <strong>5. Guardar inventario actualizado</strong>
   <p class="small">
-    Descarga el Excel después de realizar el inventario.
-    Las marcas verdes se conservarán para el siguiente día.
+    Descarga el Excel al terminar. Las marcas de los artículos
+    inventariados se conservarán para el siguiente día.
   </p>
   <button id="exportButton" class="green" disabled>
     Descargar Excel actualizado
@@ -140,651 +118,595 @@
 
 <script>
 (function () {
-  "use strict";
+"use strict";
 
-  const $ = id => document.getElementById(id);
+const $ = id => document.getElementById(id);
 
-  let workbook = null;
-  let inventorySheet = null;
-  let columns = {};
-  let cameraControls = null;
-  let torchOn = false;
+let workbook = null;
+let inventorySheet = null;
+let columns = {};
+let cameraControls = null;
+let torchOn = false;
 
-  const OUT_SHEET = "ENCONTRADO FUERA STOCK";
+let statusColumn = 0;
+let baseColumnCount = 0;
 
-  function normalize(value) {
-    return String(value ?? "")
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, "");
-  }
+const OUT_SHEET = "ENCONTRADO FUERA STOCK";
+const STATUS_HEADER = "_INVENTARIADO";
+const GREEN = "FF92D050";
 
-  function cellText(cell) {
-    const value = cell?.value;
+// Normalizar encabezados y códigos
+function normalize(value) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+}
 
-    if (value == null) return "";
+function cellText(cell) {
+  const value = cell?.value;
 
-    if (typeof value === "object") {
-      if (value.richText) {
-        return value.richText.map(x => x.text || "").join("");
-      }
+  if (value == null) return "";
 
-      if (value.text) return value.text;
-      if (value.result != null) return String(value.result);
-      if (value.hyperlink) return value.text || value.hyperlink;
+  if (typeof value === "object") {
+    if (value.richText) {
+      return value.richText.map(x => x.text || "").join("");
     }
-
-    return String(value);
+    if (value.text) return value.text;
+    if (value.result != null) return String(value.result);
+    if (value.hyperlink) return value.text || value.hyperlink;
   }
 
-  function parseBarcode(raw) {
-    const value = String(raw || "")
-      .trim()
-      .toUpperCase()
-      .replace(/\s/g, "");
+  return String(value);
+}
 
-    const clean = value.replace(/^\*+|\*+$/g, "");
-    const parts = clean.split("%");
+function parseBarcode(raw) {
+  const value = String(raw || "").trim().toUpperCase().replace(/\s/g, "");
+  const clean = value.replace(/^\*+|\*+$/g, "");
+  const parts = clean.split("%");
 
-    return {
-      raw: value,
-      pn: (parts[0] || "").replace(/[^A-Z0-9]/g, ""),
-      stock: (parts[1] || "").replace(/[^A-Z0-9]/g, "")
-    };
-  }
+  return {
+    raw: value,
+    pn: (parts[0] || "").replace(/[^A-Z0-9]/g, ""),
+    stock: (parts[1] || "").replace(/[^A-Z0-9]/g, "")
+  };
+}
 
-  function detectHeaders(sheet) {
-    const header = sheet.getRow(1);
-    const found = {};
+function setStatus(message, success = false) {
+  $("status").textContent = message;
+  $("status").classList.toggle("success", success);
+}
 
-    const aliases = {
-      pn: [
-        "NPRODUCTO",
-        "NUMEROPRODUCTO",
-        "PN",
-        "PARTNUMBER",
-        "CODIGOPRODUCTO"
-      ],
+function displayValue(row, column) {
+  if (!column) return "";
+  return cellText(row.getCell(column));
+}
 
-      stock: [
-        "NSERIE",
-        "NUMEROSERIE",
-        "STOCKID",
-        "IDSTOCK",
-        "SERIAL",
-        "SERIALNUMBER"
-      ],
+// Detectar columnas de tu Excel
+function detectHeaders(sheet) {
+  const found = {};
 
-      location: [
-        "NOESTANTUBIC",
-        "NOESTANTUBICACION",
-        "ESTANTERIA",
-        "UBICACION",
-        "LOCATION"
-      ],
+  const aliases = {
+    pn: ["NPRODUCTO", "NUMEROPRODUCTO", "PN", "PARTNUMBER", "CODIGOPRODUCTO"],
+    stock: ["NSERIE", "NUMEROSERIE", "STOCKID", "IDSTOCK", "SERIAL", "SERIALNUMBER"],
+    location: ["NOESTANTUBIC", "NOESTANTUBICACION", "ESTANTERIA", "UBICACION", "LOCATION"],
+    description: ["DESCRIPTION", "DESCRIPCION", "MODELO"],
+    warehouse: ["CODALMACEN", "CODIGOALMACEN", "ALMACEN"]
+  };
 
-      description: [
-        "DESCRIPTION",
-        "DESCRIPCION",
-        "MODELO"
-      ],
+  sheet.getRow(1).eachCell((cell, colNumber) => {
+    const name = normalize(cellText(cell));
 
-      warehouse: [
-        "CODALMACEN",
-        "CODIGOALMACEN",
-        "ALMACEN"
-      ]
-    };
-
-    header.eachCell((cell, colNumber) => {
-      const name = normalize(cellText(cell));
-
-      for (const field of Object.keys(aliases)) {
-        if (aliases[field].includes(name) && !found[field]) {
-          found[field] = colNumber;
-        }
-      }
-    });
-
-    return found;
-  }
-
-  function checkColumns() {
-    const missing = [];
-
-    if (!columns.pn) missing.push("Nº producto");
-    if (!columns.stock) missing.push("Nº serie");
-
-    if (missing.length) {
-      throw new Error(
-        "No encuentro estas columnas en la fila 1: " +
-        missing.join(", ")
-      );
-    }
-  }
-
-  function setStatus(message, success = false) {
-    $("status").textContent = message;
-    $("status").classList.toggle("success", success);
-  }
-
-  function displayValue(row, column) {
-    if (!column) return "";
-    return cellText(row.getCell(column));
-  }
-
-  // CARGAR EXCEL
-  async function loadExcel(file) {
-    if (!file) return;
-
-    try {
-      $("fileStatus").textContent = "Cargando archivo...";
-      $("searchButton").disabled = true;
-      $("startCamera").disabled = true;
-      $("exportButton").disabled = true;
-
-      if (typeof ExcelJS === "undefined") {
-        throw new Error(
-          "No se ha podido cargar ExcelJS. Comprueba tu conexión a Internet."
-        );
-      }
-
-      const data = await file.arrayBuffer();
-
-      const newWorkbook = new ExcelJS.Workbook();
-      await newWorkbook.xlsx.load(data);
-
-      const sheet = newWorkbook.getWorksheet("Hoja1");
-
-      if (!sheet) {
-        throw new Error('No existe una hoja llamada "Hoja1".');
-      }
-
-      const detected = detectHeaders(sheet);
-
-      workbook = newWorkbook;
-      inventorySheet = sheet;
-      columns = detected;
-
-      checkColumns();
-
-      $("searchButton").disabled = false;
-      $("startCamera").disabled = false;
-      $("exportButton").disabled = false;
-
-      $("fileStatus").textContent =
-        "Excel cargado correctamente. Hoja: Hoja1. Registros: " +
-        Math.max(0, inventorySheet.rowCount - 1);
-
-      setStatus(
-        "Archivo preparado. Puedes empezar a escanear.",
-        true
-      );
-
-      $("results").textContent =
-        "Esperando un código de barras.";
-
-    } catch (error) {
-      workbook = null;
-      inventorySheet = null;
-      columns = {};
-
-      $("fileStatus").textContent =
-        "Error al cargar el Excel: " + error.message;
-
-      setStatus("No se ha podido cargar el archivo.");
-      console.error(error);
-    }
-  }
-
-  // BUSCAR ARTICULOS
-  function findCandidates(raw) {
-    const code = parseBarcode(raw);
-
-    if (!code.pn && !code.stock) {
-      setStatus(
-        "El código no contiene un P/N ni un STOCK-ID reconocible."
-      );
-      return [];
-    }
-
-    const candidates = [];
-
-    for (let r = 2; r <= inventorySheet.rowCount; r++) {
-      const row = inventorySheet.getRow(r);
-
-      const pnExcel = normalize(
-        displayValue(row, columns.pn)
-      );
-
-      const stockExcel = normalize(
-        displayValue(row, columns.stock)
-      );
-
-      // P/N exacto
-      const pnMatch =
-        !!code.pn && pnExcel === code.pn;
-
-      // STOCK-ID parcial
-      const stockMatch =
-        !!code.stock && stockExcel.includes(code.stock);
-
-      if (pnMatch || stockMatch) {
-        candidates.push({
-          rowNumber: r,
-          pnMatch,
-          stockMatch,
-          pn: displayValue(row, columns.pn),
-          stock: displayValue(row, columns.stock),
-          location: displayValue(row, columns.location),
-          description: displayValue(row, columns.description),
-          warehouse: displayValue(row, columns.warehouse)
-        });
+    for (const field of Object.keys(aliases)) {
+      if (aliases[field].includes(name) && !found[field]) {
+        found[field] = colNumber;
       }
     }
+  });
 
-    // Primero los artículos que coinciden en ambos campos
-    candidates.sort((a, b) => {
-      const scoreA =
-        Number(a.pnMatch) + Number(a.stockMatch);
+  return found;
+}
 
-      const scoreB =
-        Number(b.pnMatch) + Number(b.stockMatch);
+function checkColumns() {
+  const missing = [];
+  if (!columns.pn) missing.push("Nº producto");
+  if (!columns.stock) missing.push("Nº serie");
 
-      return scoreB - scoreA;
-    });
-
-    return candidates;
+  if (missing.length) {
+    throw new Error("No encuentro las columnas: " + missing.join(", "));
   }
+}
 
-  // MOSTRAR RESULTADOS
-  function showCandidates(candidates, raw) {
-    const results = $("results");
-    results.innerHTML = "";
+// Detectar si una celda tiene el verde utilizado por la aplicación
+function isOurGreen(cell) {
+  const fill = cell.fill;
 
-    if (!candidates.length) {
-      const code = parseBarcode(raw);
+  if (!fill || !fill.fgColor) return false;
 
-      setStatus("No se ha encontrado ningún artículo coincidente.");
+  const color = String(fill.fgColor.argb || "").toUpperCase();
+  return color === GREEN;
+}
 
-      const message = document.createElement("p");
+// Quitar exclusivamente nuestro verde, sin tocar otros formatos
+function removeOurGreen(row) {
+  for (let c = 1; c <= baseColumnCount; c++) {
+    const cell = row.getCell(c);
 
-      message.textContent =
-        "No hay coincidencias para P/N: " +
-        (code.pn || "no indicado") +
-        " y STOCK-ID: " +
-        (code.stock || "no indicado") +
-        ".";
-
-      const addButton = document.createElement("button");
-
-      addButton.textContent =
-        "Añadir a ENCONTRADO FUERA STOCK";
-
-      addButton.className = "green";
-
-      addButton.onclick = () => addOutsideStock(code);
-
-      results.append(message, addButton);
-      return;
-    }
-
-    setStatus(
-      "Se han encontrado " +
-      candidates.length +
-      " posible(s) artículo(s)."
-    );
-
-    candidates.forEach(candidate => {
-      const card = document.createElement("div");
-      card.className = "candidate";
-
-      const title = document.createElement("strong");
-      title.textContent = "Fila " + candidate.rowNumber;
-
-      const details = document.createElement("div");
-
-      const fields = [
-        ["P/N", candidate.pn],
-        ["STOCK-ID", candidate.stock],
-        ["Descripción", candidate.description],
-        ["Ubicación", candidate.location],
-        ["Almacén", candidate.warehouse]
-      ];
-
-      fields.forEach(([label, value]) => {
-        const p = document.createElement("p");
-        const b = document.createElement("strong");
-
-        b.textContent = label + ": ";
-
-        p.append(
-          b,
-          document.createTextNode(value || "—")
-        );
-
-        details.appendChild(p);
-      });
-
-      const match = document.createElement("p");
-      match.className = "small";
-
-      match.textContent =
-        "Coincidencias: " +
-        (candidate.pnMatch ? "P/N " : "") +
-        (candidate.stockMatch ? "STOCK-ID" : "");
-
-      const confirm = document.createElement("button");
-
-      confirm.textContent =
-        "Confirmar artículo y marcar en verde";
-
-      confirm.className = "green";
-
-      confirm.onclick = () => confirmCandidate(candidate);
-
-      card.append(title, details, match, confirm);
-      results.appendChild(card);
-    });
-  }
-
-  // CONFIRMAR ARTICULO
-  // IMPORTANTE: SOLO SE MARCA LA FILA CONFIRMADA.
-  // NO SE BORRAN NI MODIFICAN LOS VERDES ANTERIORES.
-  function confirmCandidate(candidate) {
-    const row = inventorySheet.getRow(candidate.rowNumber);
-
-    for (let c = 1; c <= inventorySheet.columnCount; c++) {
-      row.getCell(c).fill = {
+    if (isOurGreen(cell)) {
+      cell.fill = {
         type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FF92D050" }
+        pattern: "none"
       };
     }
+  }
+}
 
-    row.commit();
+// Aplicar verde únicamente a la fila indicada
+function paintRowGreen(row) {
+  for (let c = 1; c <= baseColumnCount; c++) {
+    row.getCell(c).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: GREEN }
+    };
+  }
+}
 
-    setStatus(
-      "Artículo confirmado. Fila " +
-      candidate.rowNumber +
-      " marcada en verde. Las marcas anteriores se conservan.",
-      true
-    );
+// Preparar columna de control oculta.
+// Esta columna permite recordar qué artículos se han contado.
+function prepareStatusColumn(sheet) {
+  const header = sheet.getRow(1);
+  let foundColumn = 0;
+
+  header.eachCell((cell, colNumber) => {
+    if (normalize(cellText(cell)) === STATUS_HEADER) {
+      foundColumn = colNumber;
+    }
+  });
+
+  if (foundColumn) {
+    statusColumn = foundColumn;
+    baseColumnCount = statusColumn - 1;
+  } else {
+    baseColumnCount = sheet.columnCount;
+    statusColumn = baseColumnCount + 1;
+
+    sheet.getCell(1, statusColumn).value = STATUS_HEADER;
   }
 
-  // AÑADIR ARTICULO FUERA DE STOCK
-  function addOutsideStock(code) {
-    if (!workbook || !inventorySheet) return;
+  sheet.getColumn(statusColumn).hidden = true;
 
-    let sheet = workbook.getWorksheet(OUT_SHEET);
+  // El estado guardado en la columna oculta es la referencia.
+  // Si una fila no está marcada como SI, no debe quedar verde.
+  for (let r = 2; r <= sheet.rowCount; r++) {
+    const row = sheet.getRow(r);
+    const marked = normalize(cellText(row.getCell(statusColumn))) === "SI";
+
+    if (marked) {
+      paintRowGreen(row);
+    } else {
+      removeOurGreen(row);
+    }
+  }
+}
+
+// Cargar Excel
+async function loadExcel(file) {
+  if (!file) return;
+
+  try {
+    $("fileStatus").textContent = "Cargando archivo...";
+    $("searchButton").disabled = true;
+    $("startCamera").disabled = true;
+    $("exportButton").disabled = true;
+
+    if (typeof ExcelJS === "undefined") {
+      throw new Error("No se ha podido cargar ExcelJS. Comprueba Internet.");
+    }
+
+    const data = await file.arrayBuffer();
+    const newWorkbook = new ExcelJS.Workbook();
+
+    await newWorkbook.xlsx.load(data);
+
+    const sheet = newWorkbook.getWorksheet("Hoja1");
 
     if (!sheet) {
-      sheet = workbook.addWorksheet(OUT_SHEET);
-
-      const header = inventorySheet.getRow(1);
-      const headerValues = [];
-
-      for (
-        let c = 1;
-        c <= inventorySheet.columnCount;
-        c++
-      ) {
-        headerValues[c - 1] = header.getCell(c).value;
-      }
-
-      sheet.addRow(headerValues);
+      throw new Error('No existe una hoja llamada "Hoja1".');
     }
 
-    const outColumns = detectHeaders(sheet);
+    workbook = newWorkbook;
+    inventorySheet = sheet;
 
-    const maxCol = Math.max(
-      inventorySheet.columnCount,
-      sheet.columnCount
-    );
+    columns = detectHeaders(sheet);
+    checkColumns();
 
-    const values = new Array(maxCol).fill(null);
+    prepareStatusColumn(sheet);
 
-    if (outColumns.pn) {
-      values[outColumns.pn - 1] = code.pn;
-    }
+    $("searchButton").disabled = false;
+    $("startCamera").disabled = false;
+    $("exportButton").disabled = false;
 
-    if (outColumns.stock) {
-      values[outColumns.stock - 1] = code.stock;
-    }
-
-    if (outColumns.description) {
-      values[outColumns.description - 1] =
-        "ENCONTRADO FUERA STOCK";
-    }
-
-    const newRow = sheet.addRow(values);
-
-    for (let c = 1; c <= maxCol; c++) {
-      newRow.getCell(c).fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FFFFE699" }
-      };
-    }
+    $("fileStatus").textContent =
+      "Excel cargado correctamente. Hoja: Hoja1. Registros: " +
+      Math.max(0, sheet.rowCount - 1);
 
     setStatus(
-      "Artículo añadido a ENCONTRADO FUERA STOCK.",
+      "Archivo preparado. Puedes empezar a escanear.",
       true
     );
 
-    $("results").textContent =
-      "Registro añadido. Puedes seguir escaneando.";
+    $("results").textContent = "Esperando un código de barras.";
+
+  } catch (error) {
+    workbook = null;
+    inventorySheet = null;
+    columns = {};
+
+    $("fileStatus").textContent = "Error al cargar el Excel: " + error.message;
+    setStatus("No se ha podido cargar el archivo.");
+    console.error(error);
+  }
+}
+
+// Buscar artículos
+function findCandidates(raw) {
+  const code = parseBarcode(raw);
+
+  if (!code.pn && !code.stock) {
+    setStatus("El código no contiene P/N ni STOCK-ID reconocible.");
+    return [];
   }
 
-  // BUSQUEDA MANUAL O ESCANEO
-  function searchCode(raw) {
-    if (!workbook || !inventorySheet) {
-      setStatus("Primero debes cargar el Excel.");
-      return;
-    }
+  const candidates = [];
 
-    const value = String(raw || "").trim();
+  for (let r = 2; r <= inventorySheet.rowCount; r++) {
+    const row = inventorySheet.getRow(r);
 
-    if (!value) {
-      setStatus("Introduce o escanea un código.");
-      return;
-    }
+    const pnExcel = normalize(displayValue(row, columns.pn));
+    const stockExcel = normalize(displayValue(row, columns.stock));
 
-    $("barcodeInput").value = value;
+    const pnMatch = !!code.pn && pnExcel === code.pn;
+    const stockMatch = !!code.stock && stockExcel.includes(code.stock);
 
-    const candidates = findCandidates(value);
-
-    showCandidates(candidates, value);
-  }
-
-  // ABRIR CAMARA
-  async function startCamera() {
-    try {
-      if (!window.ZXingBrowser) {
-        throw new Error(
-          "No se ha podido cargar el lector de códigos. Comprueba Internet."
-        );
-      }
-
-      const Reader =
-        window.ZXingBrowser.BrowserMultiFormatReader;
-
-      if (!Reader) {
-        throw new Error(
-          "No se encuentra el lector de códigos de barras."
-        );
-      }
-
-      const video = $("video");
-      const reader = new Reader();
-
-      video.classList.remove("hidden");
-
-      $("startCamera").classList.add("hidden");
-      $("stopCamera").classList.remove("hidden");
-      $("torchButton").classList.remove("hidden");
-
-      setStatus("Iniciando cámara...");
-
-      cameraControls = await reader.decodeFromVideoDevice(
-        undefined,
-        video,
-        (result, error) => {
-          if (result) {
-            const text = result.getText();
-
-            stopCamera();
-            searchCode(text);
-          }
-        }
-      );
-
-      setStatus(
-        "Cámara activa. Enfoca el código de barras."
-      );
-
-    } catch (error) {
-      stopCamera();
-
-      setStatus(
-        "Error al abrir la cámara: " + error.message
-      );
-
-      console.error(error);
-    }
-  }
-
-  // DETENER CAMARA
-  function stopCamera() {
-    if (cameraControls) {
-      try {
-        cameraControls.stop();
-      } catch (e) {}
-
-      cameraControls = null;
-    }
-
-    const video = $("video");
-
-    if (video.srcObject) {
-      video.srcObject.getTracks().forEach(track => track.stop());
-      video.srcObject = null;
-    }
-
-    video.classList.add("hidden");
-
-    $("startCamera").classList.remove("hidden");
-    $("stopCamera").classList.add("hidden");
-    $("torchButton").classList.add("hidden");
-
-    torchOn = false;
-
-    $("torchButton").textContent = "Encender linterna";
-  }
-
-  // LINTERNA
-  async function toggleTorch() {
-    const video = $("video");
-    const stream = video.srcObject;
-
-    if (!stream) {
-      setStatus("La cámara no está activa.");
-      return;
-    }
-
-    const track = stream.getVideoTracks()[0];
-
-    if (!track) return;
-
-    try {
-      const capabilities = track.getCapabilities();
-
-      if (!capabilities.torch) {
-        setStatus(
-          "Este navegador o cámara no permite controlar la linterna."
-        );
-        return;
-      }
-
-      torchOn = !torchOn;
-
-      await track.applyConstraints({
-        advanced: [{ torch: torchOn }]
+    if (pnMatch || stockMatch) {
+      candidates.push({
+        rowNumber: r,
+        pnMatch,
+        stockMatch,
+        pn: displayValue(row, columns.pn),
+        stock: displayValue(row, columns.stock),
+        location: displayValue(row, columns.location),
+        description: displayValue(row, columns.description),
+        warehouse: displayValue(row, columns.warehouse)
       });
-
-      $("torchButton").textContent =
-        torchOn ? "Apagar linterna" : "Encender linterna";
-
-    } catch (error) {
-      setStatus(
-        "No se ha podido cambiar la linterna: " + error.message
-      );
     }
   }
 
-  // EXPORTAR EXCEL
-  async function exportExcel() {
-    if (!workbook) {
-      setStatus("Primero debes cargar un Excel.");
+  candidates.sort((a, b) =>
+    (Number(b.pnMatch) + Number(b.stockMatch)) -
+    (Number(a.pnMatch) + Number(a.stockMatch))
+  );
+
+  return candidates;
+}
+
+// Mostrar resultados
+function showCandidates(candidates, raw) {
+  const results = $("results");
+  results.innerHTML = "";
+
+  if (!candidates.length) {
+    const code = parseBarcode(raw);
+
+    setStatus("No se ha encontrado ningún artículo coincidente.");
+
+    const message = document.createElement("p");
+    message.textContent =
+      "P/N: " + (code.pn || "no indicado") +
+      " | STOCK-ID: " + (code.stock || "no indicado");
+
+    const addButton = document.createElement("button");
+    addButton.textContent = "Añadir a ENCONTRADO FUERA STOCK";
+    addButton.className = "green";
+    addButton.onclick = () => addOutsideStock(code);
+
+    results.append(message, addButton);
+    return;
+  }
+
+  setStatus("Se han encontrado " + candidates.length + " posible(s) artículo(s).");
+
+  candidates.forEach(candidate => {
+    const card = document.createElement("div");
+    card.className = "candidate";
+
+    const title = document.createElement("strong");
+    title.textContent = "Fila " + candidate.rowNumber;
+
+    const details = document.createElement("div");
+
+    const fields = [
+      ["P/N", candidate.pn],
+      ["STOCK-ID", candidate.stock],
+      ["Descripción", candidate.description],
+      ["Ubicación", candidate.location],
+      ["Almacén", candidate.warehouse]
+    ];
+
+    fields.forEach(([label, value]) => {
+      const p = document.createElement("p");
+      const b = document.createElement("strong");
+      b.textContent = label + ": ";
+      p.append(b, document.createTextNode(value || "—"));
+      details.appendChild(p);
+    });
+
+    const match = document.createElement("p");
+    match.className = "small";
+    match.textContent =
+      "Coincidencias: " +
+      (candidate.pnMatch ? "P/N " : "") +
+      (candidate.stockMatch ? "STOCK-ID" : "");
+
+    const confirm = document.createElement("button");
+    confirm.textContent = "Confirmar artículo y marcar en verde";
+    confirm.className = "green";
+    confirm.onclick = () => confirmCandidate(candidate);
+
+    card.append(title, details, match, confirm);
+    results.appendChild(card);
+  });
+}
+
+// Confirmar artículo.
+// Solo cambia la fila seleccionada y su marca de control.
+function confirmCandidate(candidate) {
+  const row = inventorySheet.getRow(candidate.rowNumber);
+
+  row.getCell(statusColumn).value = "SI";
+  paintRowGreen(row);
+
+  setStatus(
+    "Artículo confirmado. Fila " + candidate.rowNumber +
+    " marcada. Los artículos anteriores se conservan.",
+    true
+  );
+}
+
+// Añadir artículo fuera de stock
+function addOutsideStock(code) {
+  let sheet = workbook.getWorksheet(OUT_SHEET);
+
+  if (!sheet) {
+    sheet = workbook.addWorksheet(OUT_SHEET);
+
+    const headers = [];
+    for (let c = 1; c <= baseColumnCount; c++) {
+      headers.push(inventorySheet.getRow(1).getCell(c).value);
+    }
+
+    sheet.addRow(headers);
+  }
+
+  const outColumns = detectHeaders(sheet);
+  const values = new Array(baseColumnCount).fill(null);
+
+  if (outColumns.pn) values[outColumns.pn - 1] = code.pn;
+  if (outColumns.stock) values[outColumns.stock - 1] = code.stock;
+  if (outColumns.description) {
+    values[outColumns.description - 1] = "ENCONTRADO FUERA STOCK";
+  }
+
+  const newRow = sheet.addRow(values);
+
+  for (let c = 1; c <= baseColumnCount; c++) {
+    newRow.getCell(c).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFFFE699" }
+    };
+  }
+
+  setStatus("Artículo añadido a ENCONTRADO FUERA STOCK.", true);
+  $("results").textContent = "Registro añadido. Puedes seguir escaneando.";
+}
+
+// Buscar código
+function searchCode(raw) {
+  if (!workbook || !inventorySheet) {
+    setStatus("Primero debes cargar el Excel.");
+    return;
+  }
+
+  const value = String(raw || "").trim();
+
+  if (!value) {
+    setStatus("Introduce o escanea un código.");
+    return;
+  }
+
+  $("barcodeInput").value = value;
+  showCandidates(findCandidates(value), value);
+}
+
+// Abrir cámara
+async function startCamera() {
+  try {
+    if (!window.ZXingBrowser) {
+      throw new Error("No se ha podido cargar el lector. Comprueba Internet.");
+    }
+
+    const Reader = window.ZXingBrowser.BrowserMultiFormatReader;
+
+    if (!Reader) {
+      throw new Error("No se encuentra el lector de códigos.");
+    }
+
+    const video = $("video");
+    const reader = new Reader();
+
+    video.classList.remove("hidden");
+    $("startCamera").classList.add("hidden");
+    $("stopCamera").classList.remove("hidden");
+    $("torchButton").classList.remove("hidden");
+
+    setStatus("Iniciando cámara...");
+
+    cameraControls = await reader.decodeFromVideoDevice(
+      undefined,
+      video,
+      (result, error) => {
+        if (result) {
+          const text = result.getText();
+          stopCamera();
+          searchCode(text);
+        }
+      }
+    );
+
+    setStatus("Cámara activa. Enfoca el código de barras.");
+
+  } catch (error) {
+    stopCamera();
+    setStatus("Error al abrir la cámara: " + error.message);
+    console.error(error);
+  }
+}
+
+// Detener cámara
+function stopCamera() {
+  if (cameraControls) {
+    try { cameraControls.stop(); } catch (e) {}
+    cameraControls = null;
+  }
+
+  const video = $("video");
+
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(track => track.stop());
+    video.srcObject = null;
+  }
+
+  video.classList.add("hidden");
+  $("startCamera").classList.remove("hidden");
+  $("stopCamera").classList.add("hidden");
+  $("torchButton").classList.add("hidden");
+
+  torchOn = false;
+  $("torchButton").textContent = "Encender linterna";
+}
+
+// Linterna
+async function toggleTorch() {
+  const stream = $("video").srcObject;
+
+  if (!stream) return;
+
+  const track = stream.getVideoTracks()[0];
+  if (!track) return;
+
+  try {
+    const capabilities = track.getCapabilities();
+
+    if (!capabilities.torch) {
+      setStatus("La cámara no permite controlar la linterna desde la página.");
       return;
     }
 
-    try {
-      setStatus("Preparando el Excel actualizado...");
+    torchOn = !torchOn;
 
-      const buffer = await workbook.xlsx.writeBuffer();
+    await track.applyConstraints({
+      advanced: [{ torch: torchOn }]
+    });
 
-      const blob = new Blob(
-        [buffer],
-        {
-          type:
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        }
-      );
+    $("torchButton").textContent =
+      torchOn ? "Apagar linterna" : "Encender linterna";
 
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
+  } catch (error) {
+    setStatus("No se ha podido cambiar la linterna: " + error.message);
+  }
+}
 
-      a.href = url;
-      a.download = "INVENTARIO_ECONOCOM_ACTUALIZADO.xlsx";
-
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-
-      setTimeout(() => URL.revokeObjectURL(url), 1500);
-
-      setStatus(
-        "Excel actualizado descargado. Las marcas verdes se conservan.",
-        true
-      );
-
-    } catch (error) {
-      setStatus("Error al exportar: " + error.message);
-      console.error(error);
-    }
+// Exportar Excel
+async function exportExcel() {
+  if (!workbook || !inventorySheet) {
+    setStatus("Primero debes cargar un Excel.");
+    return;
   }
 
-  // EVENTOS
-  $("excelFile").addEventListener("change", event => {
-    loadExcel(event.target.files[0]);
-  });
+  try {
+    setStatus("Preparando Excel actualizado...");
 
-  $("searchButton").addEventListener("click", () => {
-    searchCode($("barcodeInput").value);
-  });
+    // Antes de exportar, aplicar el color solo a las filas
+    // que tienen SI en la columna oculta de control.
+    for (let r = 2; r <= inventorySheet.rowCount; r++) {
+      const row = inventorySheet.getRow(r);
+      const marked =
+        normalize(cellText(row.getCell(statusColumn))) === "SI";
 
-  $("barcodeInput").addEventListener("keydown", event => {
-    if (event.key === "Enter") {
-      searchCode($("barcodeInput").value);
+      if (marked) {
+        paintRowGreen(row);
+      } else {
+        removeOurGreen(row);
+      }
     }
-  });
 
-  $("startCamera").addEventListener("click", startCamera);
-  $("stopCamera").addEventListener("click", stopCamera);
-  $("torchButton").addEventListener("click", toggleTorch);
-  $("exportButton").addEventListener("click", exportExcel);
+    const buffer = await workbook.xlsx.writeBuffer({
+      useStyles: true,
+      useSharedStrings: true
+    });
+
+    const blob = new Blob(
+      [buffer],
+      {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      }
+    );
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+
+    a.href = url;
+    a.download = "INVENTARIO_ECONOCOM_ACTUALIZADO.xlsx";
+
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+
+    setStatus(
+      "Excel descargado correctamente. Las marcas de inventario se conservan.",
+      true
+    );
+
+  } catch (error) {
+    setStatus("Error al exportar: " + error.message);
+    console.error(error);
+  }
+}
+
+// Eventos
+$("excelFile").addEventListener("change", event => {
+  loadExcel(event.target.files[0]);
+});
+
+$("searchButton").addEventListener("click", () => {
+  searchCode($("barcodeInput").value);
+});
+
+$("barcodeInput").addEventListener("keydown", event => {
+  if (event.key === "Enter") {
+    searchCode($("barcodeInput").value);
+  }
+});
+
+$("startCamera").addEventListener("click", startCamera);
+$("stopCamera").addEventListener("click", stopCamera);
+$("torchButton").addEventListener("click", toggleTorch);
+$("exportButton").addEventListener("click", exportExcel);
 
 })();
 </script>
