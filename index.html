@@ -108,8 +108,8 @@ input { border: 1px solid #bbb; background: white; }
 <div class="panel">
   <strong>5. Guardar inventario actualizado</strong>
   <p class="small">
-    La columna H mostrará SI en los artículos inventariados.
-    Solo la celda H de cada artículo confirmado aparecerá en verde.
+    La columna Columna1 mostrará SI en los artículos inventariados.
+    Solo la celda marcada aparecerá en verde.
     La descarga incluirá fecha y hora en el nombre del archivo.
   </p>
   <button id="exportButton" class="green" disabled>
@@ -130,15 +130,16 @@ let cameraControls = null;
 let torchOn = false;
 
 let statusColumn = 0;
+let secondControlColumn = 0;
 let firstInventoryColumn = 1;
 let lastInventoryColumn = 0;
 
 const OUT_SHEET = "ENCONTRADO FUERA STOCK";
 const STATUS_HEADER = "COLUMNA1";
+const SECOND_STATUS_HEADER = "COLUMNA2";
 const GREEN = "FF92D050";
 const SHEET_NAME = "GBS Inventario por Ubicacion";
 
-// Normalizar encabezados y códigos
 function normalize(value) {
   return String(value ?? "")
     .normalize("NFD")
@@ -186,7 +187,7 @@ function displayValue(row, column) {
   return cellText(row.getCell(column));
 }
 
-// Detectar columnas del Excel
+// Detectar las columnas de datos por encabezado.
 function detectHeaders(sheet) {
   const found = {};
 
@@ -225,7 +226,6 @@ function checkColumns() {
   }
 }
 
-// Comprobar si una celda tiene nuestro verde
 function isOurGreen(cell) {
   const fill = cell.fill;
 
@@ -235,7 +235,6 @@ function isOurGreen(cell) {
   return color === GREEN;
 }
 
-// Quitar únicamente nuestro verde de una celda
 function removeOurGreen(cell) {
   if (isOurGreen(cell)) {
     cell.fill = {
@@ -245,7 +244,6 @@ function removeOurGreen(cell) {
   }
 }
 
-// Pintar únicamente la celda H
 function paintStatusGreen(cell) {
   cell.fill = {
     type: "pattern",
@@ -254,14 +252,21 @@ function paintStatusGreen(cell) {
   };
 }
 
-// Preparar columna1
+// Localizar Columna1 y Columna2 sin fijar una posición concreta.
 function prepareStatusColumn(sheet) {
   const header = sheet.getRow(1);
   let foundColumn = 0;
+  let foundSecondColumn = 0;
 
   header.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-    if (normalize(cellText(cell)) === STATUS_HEADER) {
+    const name = normalize(cellText(cell));
+
+    if (name === STATUS_HEADER) {
       foundColumn = colNumber;
+    }
+
+    if (name === SECOND_STATUS_HEADER) {
+      foundSecondColumn = colNumber;
     }
   });
 
@@ -271,20 +276,27 @@ function prepareStatusColumn(sheet) {
     );
   }
 
-  statusColumn = foundColumn;
-
-  // La columna H es la columna de control.
-  firstInventoryColumn = 1;
-  lastInventoryColumn = statusColumn - 1;
-
-  if (statusColumn !== 9) {
+  if (!foundSecondColumn) {
     throw new Error(
-      'Columna1 debería estar en la columna I (posición 9), pero se encuentra en la columna ' +
-      statusColumn + '.'
+      'No encuentro la columna "Columna2" en la hoja "' + SHEET_NAME + '".'
     );
   }
 
-  // Mostrar Columna1 al abrir el Excel.
+  if (foundSecondColumn !== foundColumn + 1) {
+    throw new Error(
+      'Columna2 debe estar justo después de Columna1. ' +
+      'Columna1 está en la posición ' + foundColumn +
+      ' y Columna2 en la posición ' + foundSecondColumn + '.'
+    );
+  }
+
+  statusColumn = foundColumn;
+  secondControlColumn = foundSecondColumn;
+
+  firstInventoryColumn = 1;
+  lastInventoryColumn = statusColumn - 1;
+
+  // Mostrar Columna1. No modificar Columna2.
   sheet.getColumn(statusColumn).hidden = false;
 
   // Restaurar las marcas según los SI guardados.
@@ -301,7 +313,7 @@ function prepareStatusColumn(sheet) {
   }
 }
 
-// Cargar Excel
+// Cargar Excel.
 async function loadExcel(file) {
   if (!file) return;
 
@@ -342,7 +354,9 @@ async function loadExcel(file) {
 
     $("fileStatus").textContent =
       "Excel cargado correctamente. Hoja: " + SHEET_NAME +
-      ". Registros: " + Math.max(0, sheet.rowCount - 1);
+      ". Registros: " + Math.max(0, sheet.rowCount - 1) +
+      ". Columna1: " + statusColumn +
+      ". Columna2: " + secondControlColumn + ".";
 
     setStatus("Archivo preparado. Puedes empezar a escanear.", true);
     $("results").textContent = "Esperando un código de barras.";
@@ -364,7 +378,7 @@ async function loadExcel(file) {
   }
 }
 
-// Buscar artículos
+// Buscar artículos.
 function findCandidates(raw) {
   const code = parseBarcode(raw);
 
@@ -406,7 +420,7 @@ function findCandidates(raw) {
   return candidates;
 }
 
-// Mostrar resultados
+// Mostrar resultados.
 function showCandidates(candidates, raw) {
   const results = $("results");
   results.innerHTML = "";
@@ -474,15 +488,12 @@ function showCandidates(candidates, raw) {
   });
 }
 
-// Confirmar artículo
+// Confirmar artículo.
 function confirmCandidate(candidate) {
   const row = inventorySheet.getRow(candidate.rowNumber);
   const statusCell = row.getCell(statusColumn);
 
-  // Guardar SI en Columna1.
   statusCell.value = "SI";
-
-  // Colorear únicamente la celda H.
   paintStatusGreen(statusCell);
 
   setStatus(
@@ -492,7 +503,7 @@ function confirmCandidate(candidate) {
   );
 }
 
-// Añadir artículo fuera de stock
+// Añadir artículo fuera de stock.
 function addOutsideStock(code) {
   let sheet = workbook.getWorksheet(OUT_SHEET);
 
@@ -531,7 +542,7 @@ function addOutsideStock(code) {
     "Registro añadido. Puedes seguir escaneando.";
 }
 
-// Buscar código
+// Buscar código.
 function searchCode(raw) {
   if (!workbook || !inventorySheet) {
     setStatus("Primero debes cargar el Excel.");
@@ -549,7 +560,7 @@ function searchCode(raw) {
   showCandidates(findCandidates(value), value);
 }
 
-// Abrir cámara
+// Abrir cámara.
 async function startCamera() {
   try {
     if (!window.ZXingBrowser) {
@@ -593,7 +604,7 @@ async function startCamera() {
   }
 }
 
-// Detener cámara
+// Detener cámara.
 function stopCamera() {
   if (cameraControls) {
     try { cameraControls.stop(); } catch (e) {}
@@ -616,7 +627,7 @@ function stopCamera() {
   $("torchButton").textContent = "Encender linterna";
 }
 
-// Linterna
+// Linterna.
 async function toggleTorch() {
   const stream = $("video").srcObject;
 
@@ -647,7 +658,7 @@ async function toggleTorch() {
   }
 }
 
-// Crear nombre de archivo con fecha y hora local
+// Nombre de archivo con fecha y hora local.
 function getExportFileName() {
   const now = new Date();
 
@@ -662,7 +673,7 @@ function getExportFileName() {
     "_" + hours + "-" + minutes + ".xlsx";
 }
 
-// Exportar Excel
+// Exportar Excel.
 async function exportExcel() {
   if (!workbook || !inventorySheet) {
     setStatus("Primero debes cargar un Excel.");
@@ -673,10 +684,10 @@ async function exportExcel() {
     $("exportButton").disabled = true;
     setStatus("Preparando Excel actualizado...");
 
-    // Mantener visible la columna H.
+    // Mantener visible Columna1.
     inventorySheet.getColumn(statusColumn).hidden = false;
 
-    // Revisar todos los SI y colorear exclusivamente H.
+    // Revisar todos los SI y colorear solo la celda de control.
     for (let r = 2; r <= inventorySheet.rowCount; r++) {
       const row = inventorySheet.getRow(r);
       const statusCell = row.getCell(statusColumn);
@@ -690,7 +701,6 @@ async function exportExcel() {
       }
     }
 
-    // Generar el archivo Excel.
     const buffer = await workbook.xlsx.writeBuffer();
 
     const blob = new Blob(
@@ -713,7 +723,7 @@ async function exportExcel() {
     setTimeout(() => URL.revokeObjectURL(url), 5000);
 
     setStatus(
-      "Excel descargado correctamente. Columna H visible y marcas SI en verde.",
+      "Excel descargado. Columna1 visible y marcas SI en verde.",
       true
     );
 
@@ -726,7 +736,7 @@ async function exportExcel() {
   }
 }
 
-// Eventos
+// Eventos.
 $("excelFile").addEventListener("change", event => {
   loadExcel(event.target.files[0]);
 });
