@@ -6,75 +6,29 @@
 <title>Inventario ECONOCOM</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-<script src="https://unpkg.com/@zxing/browser@0.1.5/umd/zxing-browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
 <style>
-body {
-  font-family: Arial, sans-serif;
-  margin: 0;
-  padding: 16px;
-  background: #f2f4f7;
-  color: #222;
-}
-h2 { margin-top: 0; }
-.panel {
-  background: white;
-  padding: 16px;
-  margin-bottom: 14px;
-  border-radius: 10px;
-  box-shadow: 0 1px 5px #0002;
-}
-button, input {
-  box-sizing: border-box;
-  width: 100%;
-  padding: 12px;
-  margin-top: 8px;
-  border-radius: 7px;
-  font-size: 16px;
-}
-button {
-  border: 0;
-  background: #1557a0;
-  color: white;
-  font-weight: bold;
-}
-button:disabled { opacity: .5; }
-button.secondary { background: #555; }
-button.green { background: #218838; }
-input { border: 1px solid #bbb; background: white; }
-#video {
-  width: 100%;
-  max-height: 300px;
-  background: #111;
-  border-radius: 8px;
-  margin-top: 10px;
-}
-#status {
-  padding: 12px;
-  border-radius: 7px;
-  background: #e9ecef;
-  margin-top: 10px;
-  overflow-wrap: anywhere;
-}
-.candidate {
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  padding: 12px;
-  margin-top: 10px;
-  background: white;
-}
-.candidate p { margin: 5px 0; }
-.small { font-size: 13px; color: #555; }
-.hidden { display: none; }
-.success {
-  background: #d4edda !important;
-  color: #155724;
-}
+body{font-family:Arial,sans-serif;margin:0;padding:16px;background:#f2f4f7;color:#222}
+h2{margin-top:0}
+.panel{background:white;padding:16px;margin-bottom:14px;border-radius:10px;box-shadow:0 1px 5px #0002}
+button,input{box-sizing:border-box;width:100%;padding:12px;margin-top:8px;border-radius:7px;font-size:16px}
+button{border:0;background:#1557a0;color:white;font-weight:bold}
+button:disabled{opacity:.5}
+button.secondary{background:#555}
+button.green{background:#218838}
+input{border:1px solid #bbb;background:white}
+#video{width:100%;max-height:360px;background:#111;border-radius:8px;margin-top:10px}
+#status{padding:12px;border-radius:7px;background:#e9ecef;margin-top:10px;overflow-wrap:anywhere}
+.candidate{border:1px solid #ccc;border-radius:8px;padding:12px;margin-top:10px;background:white}
+.candidate p{margin:5px 0}
+.small{font-size:13px;color:#555}
+.hidden{display:none}
+.success{background:#d4edda!important;color:#155724}
+#ocrText{white-space:pre-wrap;overflow-wrap:anywhere;background:#f7f7f7;padding:10px;border-radius:6px;min-height:35px}
 </style>
 </head>
-
 <body>
-
 <h2>Inventario ECONOCOM</h2>
 
 <div class="panel">
@@ -84,20 +38,22 @@ input { border: 1px solid #bbb; background: white; }
 </div>
 
 <div class="panel">
-  <strong>2. Escanear código de barras</strong>
-  <video id="video" playsinline muted class="hidden"></video>
+  <strong>2. Leer etiqueta mediante OCR</strong>
+  <video id="video" playsinline muted autoplay class="hidden"></video>
+  <canvas id="captureCanvas" class="hidden"></canvas>
   <button id="startCamera" disabled>Abrir cámara</button>
+  <button id="captureButton" class="green hidden" disabled>Leer etiqueta (OCR)</button>
   <button id="stopCamera" class="secondary hidden">Detener cámara</button>
   <button id="torchButton" class="secondary hidden">Encender linterna</button>
-  <p class="small">
-    Enfoca el código de barras con buena iluminación.
-    Si la linterna no funciona, utiliza iluminación ambiental.
-  </p>
+  <p class="small">Enfoca la etiqueta completa, procura que el texto STOCK-ID y P/N se vea nítido y pulsa «Leer etiqueta (OCR)». El reconocimiento se realiza en el navegador.</p>
+  <div id="ocrStatus" class="small">OCR preparado cuando abras la cámara.</div>
+  <strong class="small">Texto reconocido:</strong>
+  <div id="ocrText">Todavía no se ha realizado ninguna lectura.</div>
 </div>
 
 <div class="panel">
-  <strong>3. Buscar código manualmente</strong>
-  <input id="barcodeInput" placeholder="Ejemplo: *05Y1J9%S250037">
+  <strong>3. Buscar manualmente</strong>
+  <input id="barcodeInput" placeholder="Introduce P/N y/o STOCK-ID">
   <button id="searchButton" disabled>Buscar en Excel</button>
   <div id="status">Primero carga el archivo Excel.</div>
 </div>
@@ -109,712 +65,322 @@ input { border: 1px solid #bbb; background: white; }
 
 <div class="panel">
   <strong>5. Guardar inventario actualizado</strong>
-  <p class="small">
-    Se escribirá SI en Columna1 para cada artículo confirmado.
-    Solo las letras SI aparecerán en verde y negrita.
-    No se coloreará el fondo de las celdas ni las filas.
-    La descarga incluirá fecha y hora en el nombre del archivo.
-  </p>
-  <button id="exportButton" class="green" disabled>
-    Descargar Excel actualizado
-  </button>
+  <p class="small">Se escribirá SI en Columna1 para cada artículo confirmado. Solo las letras SI aparecerán en verde y negrita. No se coloreará el fondo de las celdas ni las filas. La descarga incluirá fecha y hora en el nombre del archivo.</p>
+  <button id="exportButton" class="green" disabled>Descargar Excel actualizado</button>
 </div>
 
 <script>
-(function () {
+(function(){
 "use strict";
+const $=id=>document.getElementById(id);
+let workbook=null,inventorySheet=null,columns={},cameraStream=null,torchOn=false,ocrWorker=null,ocrBusy=false;
+let statusColumn=0,secondControlColumn=0,firstInventoryColumn=1,lastInventoryColumn=0;
+const OUT_SHEET="ENCONTRADO FUERA STOCK";
+const STATUS_HEADER="COLUMNA1",SECOND_STATUS_HEADER="COLUMNA2";
+const SHEET_NAME="GBS Inventario por Ubicacion";
 
-const $ = id => document.getElementById(id);
+function normalize(value){
+ return String(value??"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase().replace(/[^A-Z0-9]/g,"");
+}
+function cellText(cell){
+ const value=cell?.value;if(value==null)return "";
+ if(typeof value==="object"){
+  if(value.richText)return value.richText.map(x=>x.text||"").join("");
+  if(value.text)return value.text;
+  if(value.result!=null)return String(value.result);
+  if(value.hyperlink)return value.text||value.hyperlink;
+ }
+ return String(value);
+}
+function setStatus(message,success=false){
+ $("status").textContent=message;$("status").classList.toggle("success",success);
+}
+function displayValue(row,column){return column?cellText(row.getCell(column)):"";}
 
-let workbook = null;
-let inventorySheet = null;
-let columns = {};
-let cameraControls = null;
-let torchOn = false;
-
-let statusColumn = 0;
-let secondControlColumn = 0;
-let firstInventoryColumn = 1;
-let lastInventoryColumn = 0;
-
-const OUT_SHEET = "ENCONTRADO FUERA STOCK";
-const STATUS_HEADER = "COLUMNA1";
-const SECOND_STATUS_HEADER = "COLUMNA2";
-const SHEET_NAME = "GBS Inventario por Ubicacion";
-
-// Normalizar encabezados y códigos.
-function normalize(value) {
-  return String(value ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "");
+// Conserva la lectura manual del antiguo formato *PN%STOCK.
+function parseBarcode(raw){
+ const value=String(raw||"").trim().toUpperCase().replace(/\s/g,"");
+ const clean=value.replace(/^\*+|\*+$/g,""),parts=clean.split("%");
+ return {raw:value,pn:(parts[0]||"").replace(/[^A-Z0-9]/g,""),stock:(parts[1]||"").replace(/[^A-Z0-9]/g,"")};
 }
 
-function cellText(cell) {
-  const value = cell?.value;
+// Extrae P/N y STOCK-ID del texto reconocido por OCR.
+function parseOcrText(text){
+ const lines=String(text||"").toUpperCase().replace(/\r/g,"\n").split(/\n+/).map(x=>x.trim()).filter(Boolean);
+ const joined=lines.join("\n");
+ let pn="",stock="";
 
-  if (value == null) return "";
+ const stockMatch=joined.match(/STOCK\s*[-_ ]?\s*ID\s*[:#]?\s*([A-Z0-9][A-Z0-9-]{4,})/i);
+ const pnMatch=joined.match(/\bP\s*\/?\s*N\b\s*[:#]?\s*([A-Z0-9][A-Z0-9-]{2,})/i);
 
-  if (typeof value === "object") {
-    if (value.richText) {
-      return value.richText.map(x => x.text || "").join("");
-    }
-    if (value.text) return value.text;
-    if (value.result != null) return String(value.result);
-    if (value.hyperlink) return value.text || value.hyperlink;
-  }
+ if(stockMatch)stock=normalize(stockMatch[1]);
+ if(pnMatch)pn=normalize(pnMatch[1]);
 
-  return String(value);
+ // Respaldo para OCR que confunde el guion o los espacios de las etiquetas.
+ if(!stock){
+  const m=joined.match(/\bS\s*2\s*5\s*0\s*0\s*3\s*7\s*7\s*4\b/);
+  if(m)stock=normalize(m[0]);
+ }
+ return {raw:joined,pn,stock};
+}
+function parseSearchInput(raw){
+ const value=String(raw||"").trim();
+ if(value.includes("%")||value.startsWith("*"))return parseBarcode(value);
+ return parseOcrText(value);
 }
 
-function parseBarcode(raw) {
-  const value = String(raw || "").trim().toUpperCase().replace(/\s/g, "");
-  const clean = value.replace(/^\*+|\*+$/g, "");
-  const parts = clean.split("%");
-
-  return {
-    raw: value,
-    pn: (parts[0] || "").replace(/[^A-Z0-9]/g, ""),
-    stock: (parts[1] || "").replace(/[^A-Z0-9]/g, "")
-  };
+function detectHeaders(sheet){
+ const found={};
+ const aliases={
+  pn:["NPRODUCTO","NUMEROPRODUCTO","PN","PARTNUMBER","CODIGOPRODUCTO"],
+  stock:["NSERIE","NUMEROSERIE","STOCKID","IDSTOCK","SERIAL","SERIALNUMBER"],
+  location:["NOESTANTUBIC","NOESTANTUBICACION","ESTANTERIA","UBICACION","LOCATION"],
+  description:["DESCRIPTION","DESCRIPCION","MODELO"],
+  warehouse:["CODALMACEN","CODIGOALMACEN","ALMACEN"]
+ };
+ sheet.getRow(1).eachCell({includeEmpty:true},(cell,colNumber)=>{
+  const name=normalize(cellText(cell));
+  for(const field of Object.keys(aliases))if(aliases[field].includes(name)&&!found[field])found[field]=colNumber;
+ });
+ return found;
+}
+function checkColumns(){
+ const missing=[];
+ if(!columns.pn)missing.push("Nº producto");
+ if(!columns.stock)missing.push("Nº serie");
+ if(!columns.warehouse)missing.push("Cód. almacén");
+ if(!columns.location)missing.push("No. estant./ubic.");
+ if(!columns.description)missing.push("Description");
+ if(missing.length)throw new Error("No encuentro las columnas: "+missing.join(", "));
+}
+function paintStatusGreen(cell){
+ cell.font={...(cell.font||{}),color:{argb:"FF008000"},bold:true};
+}
+function prepareStatusColumn(sheet){
+ const header=sheet.getRow(1);let foundColumn=0,foundSecondColumn=0;
+ header.eachCell({includeEmpty:true},(cell,colNumber)=>{
+  const name=normalize(cellText(cell));
+  if(name===STATUS_HEADER)foundColumn=colNumber;
+  if(name===SECOND_STATUS_HEADER)foundSecondColumn=colNumber;
+ });
+ if(!foundColumn)throw new Error('No encuentro la columna "Columna1" en la hoja "'+SHEET_NAME+'".');
+ if(!foundSecondColumn)throw new Error('No encuentro la columna "Columna2" en la hoja "'+SHEET_NAME+'".');
+ if(foundSecondColumn!==foundColumn+1)throw new Error("Columna2 debe estar justo después de Columna1. Columna1 está en la posición "+foundColumn+" y Columna2 en la posición "+foundSecondColumn+".");
+ statusColumn=foundColumn;secondControlColumn=foundSecondColumn;
+ firstInventoryColumn=1;lastInventoryColumn=statusColumn-1;
+ sheet.getColumn(statusColumn).hidden=false;
+ for(let r=2;r<=sheet.rowCount;r++){
+  const statusCell=sheet.getRow(r).getCell(statusColumn);
+  if(normalize(cellText(statusCell))==="SI")paintStatusGreen(statusCell);
+ }
+}
+async function loadExcel(file){
+ if(!file)return;
+ try{
+  $("fileStatus").textContent="Cargando archivo...";
+  $("searchButton").disabled=true;$("startCamera").disabled=true;$("exportButton").disabled=true;
+  if(typeof ExcelJS==="undefined")throw new Error("No se ha podido cargar ExcelJS. Comprueba Internet.");
+  const data=await file.arrayBuffer(),newWorkbook=new ExcelJS.Workbook();
+  await newWorkbook.xlsx.load(data);
+  const sheet=newWorkbook.getWorksheet(SHEET_NAME);
+  if(!sheet)throw new Error('No existe una hoja llamada "'+SHEET_NAME+'". Comprueba el nombre exacto de la pestaña del Excel.');
+  workbook=newWorkbook;inventorySheet=sheet;columns=detectHeaders(sheet);
+  checkColumns();prepareStatusColumn(sheet);
+  $("searchButton").disabled=false;$("startCamera").disabled=false;$("exportButton").disabled=false;
+  $("fileStatus").textContent="Excel cargado correctamente. Hoja: "+SHEET_NAME+". Registros: "+Math.max(0,sheet.rowCount-1)+". Columna1: "+statusColumn+". Columna2: "+secondControlColumn+".";
+  setStatus("Archivo preparado. Puedes empezar a leer etiquetas.",true);
+  $("results").textContent="Esperando una etiqueta.";
+ }catch(error){
+  workbook=null;inventorySheet=null;columns={};
+  $("searchButton").disabled=true;$("startCamera").disabled=true;$("exportButton").disabled=true;
+  $("fileStatus").textContent="Error al cargar el Excel: "+error.message;
+  setStatus("No se ha podido cargar el archivo.");console.error(error);
+ }
 }
 
-function setStatus(message, success = false) {
-  $("status").textContent = message;
-  $("status").classList.toggle("success", success);
-}
-
-function displayValue(row, column) {
-  if (!column) return "";
-  return cellText(row.getCell(column));
-}
-
-// Detectar columnas de datos.
-function detectHeaders(sheet) {
-  const found = {};
-
-  const aliases = {
-    pn: ["NPRODUCTO", "NUMEROPRODUCTO", "PN", "PARTNUMBER", "CODIGOPRODUCTO"],
-    stock: ["NSERIE", "NUMEROSERIE", "STOCKID", "IDSTOCK", "SERIAL", "SERIALNUMBER"],
-    location: ["NOESTANTUBIC", "NOESTANTUBICACION", "ESTANTERIA", "UBICACION", "LOCATION"],
-    description: ["DESCRIPTION", "DESCRIPCION", "MODELO"],
-    warehouse: ["CODALMACEN", "CODIGOALMACEN", "ALMACEN"]
-  };
-
-  sheet.getRow(1).eachCell({ includeEmpty: true }, (cell, colNumber) => {
-    const name = normalize(cellText(cell));
-
-    for (const field of Object.keys(aliases)) {
-      if (aliases[field].includes(name) && !found[field]) {
-        found[field] = colNumber;
-      }
-    }
+function findCandidates(raw){
+ const code=(typeof raw==="object"&&raw!==null)?raw:parseSearchInput(raw);
+ if(!code.pn&&!code.stock){setStatus("No se han podido extraer P/N ni STOCK-ID. Puedes corregirlos manualmente.");return [];}
+ const candidates=[];
+ for(let r=2;r<=inventorySheet.rowCount;r++){
+  const row=inventorySheet.getRow(r);
+  const pnExcel=normalize(displayValue(row,columns.pn));
+  const stockExcel=normalize(displayValue(row,columns.stock));
+  const pnMatch=!!code.pn&&pnExcel===normalize(code.pn);
+  const stockMatch=!!code.stock&&(stockExcel===normalize(code.stock)||stockExcel.includes(normalize(code.stock)));
+  if(pnMatch||stockMatch)candidates.push({
+   rowNumber:r,pnMatch,stockMatch,pn:displayValue(row,columns.pn),
+   stock:displayValue(row,columns.stock),location:displayValue(row,columns.location),
+   description:displayValue(row,columns.description),warehouse:displayValue(row,columns.warehouse)
   });
-
-  return found;
+ }
+ candidates.sort((a,b)=>(Number(b.pnMatch)+Number(b.stockMatch))-(Number(a.pnMatch)+Number(a.stockMatch)));
+ return candidates;
 }
-
-function checkColumns() {
-  const missing = [];
-
-  if (!columns.pn) missing.push("Nº producto");
-  if (!columns.stock) missing.push("Nº serie");
-  if (!columns.warehouse) missing.push("Cód. almacén");
-  if (!columns.location) missing.push("No. estant./ubic.");
-  if (!columns.description) missing.push("Description");
-
-  if (missing.length) {
-    throw new Error("No encuentro las columnas: " + missing.join(", "));
-  }
-}
-
-// Poner únicamente el texto SI en verde y negrita.
-function paintStatusGreen(cell) {
-  cell.font = {
-    ...(cell.font || {}),
-    color: { argb: "FF008000" },
-    bold: true
-  };
-}
-
-// No se modifica el formato de las celdas sin SI.
-function removeOurGreen(cell) {
-  // No modificar formato ni fondo.
-}
-
-// Localizar Columna1 y Columna2 por sus encabezados.
-function prepareStatusColumn(sheet) {
-  const header = sheet.getRow(1);
-  let foundColumn = 0;
-  let foundSecondColumn = 0;
-
-  header.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-    const name = normalize(cellText(cell));
-
-    if (name === STATUS_HEADER) {
-      foundColumn = colNumber;
-    }
-
-    if (name === SECOND_STATUS_HEADER) {
-      foundSecondColumn = colNumber;
-    }
+function showCandidates(candidates,raw){
+ const results=$("results");results.innerHTML="";
+ const code=(typeof raw==="object"&&raw!==null)?raw:parseSearchInput(raw);
+ if(!candidates.length){
+  setStatus("No se ha encontrado ningún artículo coincidente.");
+  const message=document.createElement("p");
+  message.textContent="P/N: "+(code.pn||"no reconocido")+" | STOCK-ID: "+(code.stock||"no reconocido");
+  const addButton=document.createElement("button");addButton.textContent="Añadir a ENCONTRADO FUERA STOCK";addButton.className="green";
+  addButton.onclick=()=>addOutsideStock(code);results.append(message,addButton);return;
+ }
+ setStatus("Se han encontrado "+candidates.length+" posible(s) artículo(s).");
+ candidates.forEach(candidate=>{
+  const card=document.createElement("div");card.className="candidate";
+  const title=document.createElement("strong");title.textContent="Fila "+candidate.rowNumber;
+  const details=document.createElement("div");
+  [["P/N",candidate.pn],["STOCK-ID",candidate.stock],["Descripción",candidate.description],["Ubicación",candidate.location],["Almacén",candidate.warehouse]].forEach(([label,value])=>{
+   const p=document.createElement("p"),b=document.createElement("strong");b.textContent=label+": ";p.append(b,document.createTextNode(value||"—"));details.appendChild(p);
   });
-
-  if (!foundColumn) {
-    throw new Error(
-      'No encuentro la columna "Columna1" en la hoja "' + SHEET_NAME + '".'
-    );
-  }
-
-  if (!foundSecondColumn) {
-    throw new Error(
-      'No encuentro la columna "Columna2" en la hoja "' + SHEET_NAME + '".'
-    );
-  }
-
-  if (foundSecondColumn !== foundColumn + 1) {
-    throw new Error(
-      'Columna2 debe estar justo después de Columna1. ' +
-      'Columna1 está en la posición ' + foundColumn +
-      ' y Columna2 en la posición ' + foundSecondColumn + '.'
-    );
-  }
-
-  statusColumn = foundColumn;
-  secondControlColumn = foundSecondColumn;
-
-  firstInventoryColumn = 1;
-  lastInventoryColumn = statusColumn - 1;
-
-  sheet.getColumn(statusColumn).hidden = false;
-
-  for (let r = 2; r <= sheet.rowCount; r++) {
-    const row = sheet.getRow(r);
-    const statusCell = row.getCell(statusColumn);
-    const marked = normalize(cellText(statusCell)) === "SI";
-
-    if (marked) {
-      paintStatusGreen(statusCell);
-    }
-  }
+  const match=document.createElement("p");match.className="small";
+  match.textContent="Coincidencias: "+(candidate.pnMatch?"P/N ":"")+(candidate.stockMatch?"STOCK-ID":"");
+  const confirm=document.createElement("button");confirm.textContent="Confirmar artículo";confirm.className="green";confirm.onclick=()=>confirmCandidate(candidate);
+  card.append(title,details,match,confirm);results.appendChild(card);
+ });
+}
+function confirmCandidate(candidate){
+ const statusCell=inventorySheet.getRow(candidate.rowNumber).getCell(statusColumn);
+ statusCell.value="SI";paintStatusGreen(statusCell);
+ setStatus("Artículo confirmado. Fila "+candidate.rowNumber+" marcada en Columna1. Los artículos anteriores se conservan.",true);
+}
+function addOutsideStock(code){
+ let sheet=workbook.getWorksheet(OUT_SHEET);
+ if(!sheet){
+  sheet=workbook.addWorksheet(OUT_SHEET);const headers=[];
+  for(let c=1;c<=lastInventoryColumn;c++)headers.push(inventorySheet.getRow(1).getCell(c).value);
+  sheet.addRow(headers);
+ }
+ const outColumns=detectHeaders(sheet),values=new Array(lastInventoryColumn).fill(null);
+ if(outColumns.pn)values[outColumns.pn-1]=code.pn||"";
+ if(outColumns.stock)values[outColumns.stock-1]=code.stock||"";
+ if(outColumns.description)values[outColumns.description-1]="ENCONTRADO FUERA STOCK";
+ const newRow=sheet.addRow(values);
+ for(let c=1;c<=lastInventoryColumn;c++)newRow.getCell(c).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFFFE699"}};
+ setStatus("Artículo añadido a ENCONTRADO FUERA STOCK.",true);
+ $("results").textContent="Registro añadido. Puedes seguir leyendo etiquetas.";
+}
+function searchCode(raw){
+ if(!workbook||!inventorySheet){setStatus("Primero debes cargar el Excel.");return;}
+ const value=String(raw||"").trim();if(!value){setStatus("Introduce P/N y/o STOCK-ID.");return;}
+ $("barcodeInput").value=value;showCandidates(findCandidates(value),value);
 }
 
-// Cargar Excel.
-async function loadExcel(file) {
-  if (!file) return;
-
-  try {
-    $("fileStatus").textContent = "Cargando archivo...";
-    $("searchButton").disabled = true;
-    $("startCamera").disabled = true;
-    $("exportButton").disabled = true;
-
-    if (typeof ExcelJS === "undefined") {
-      throw new Error("No se ha podido cargar ExcelJS. Comprueba Internet.");
-    }
-
-    const data = await file.arrayBuffer();
-    const newWorkbook = new ExcelJS.Workbook();
-
-    await newWorkbook.xlsx.load(data);
-
-    const sheet = newWorkbook.getWorksheet(SHEET_NAME);
-
-    if (!sheet) {
-      throw new Error(
-        'No existe una hoja llamada "' + SHEET_NAME +
-        '". Comprueba el nombre exacto de la pestaña del Excel.'
-      );
-    }
-
-    workbook = newWorkbook;
-    inventorySheet = sheet;
-
-    columns = detectHeaders(sheet);
-    checkColumns();
-    prepareStatusColumn(sheet);
-
-    $("searchButton").disabled = false;
-    $("startCamera").disabled = false;
-    $("exportButton").disabled = false;
-
-    $("fileStatus").textContent =
-      "Excel cargado correctamente. Hoja: " + SHEET_NAME +
-      ". Registros: " + Math.max(0, sheet.rowCount - 1) +
-      ". Columna1: " + statusColumn +
-      ". Columna2: " + secondControlColumn + ".";
-
-    setStatus("Archivo preparado. Puedes empezar a escanear.", true);
-    $("results").textContent = "Esperando un código de barras.";
-
-  } catch (error) {
-    workbook = null;
-    inventorySheet = null;
-    columns = {};
-
-    $("searchButton").disabled = true;
-    $("startCamera").disabled = true;
-    $("exportButton").disabled = true;
-
-    $("fileStatus").textContent =
-      "Error al cargar el Excel: " + error.message;
-
-    setStatus("No se ha podido cargar el archivo.");
-    console.error(error);
+// OCR: el trabajador se descarga una vez y se reutiliza.
+async function getOcrWorker(){
+ if(ocrWorker)return ocrWorker;
+ if(!window.Tesseract)throw new Error("No se ha podido cargar Tesseract OCR. Comprueba la conexión a Internet.");
+ $("ocrStatus").textContent="Preparando motor OCR (primera carga)...";
+ ocrWorker=await Tesseract.createWorker("eng",1,{
+  logger:m=>{
+   if(m.status==="loading tesseract core")$("ocrStatus").textContent="Cargando motor OCR...";
+   else if(m.status==="loading language traineddata")$("ocrStatus").textContent="Descargando idioma de reconocimiento...";
+   else if(m.status==="recognizing text")$("ocrStatus").textContent="Reconociendo texto...";
   }
+ });
+ await ocrWorker.setParameters({
+  preserve_interword_spaces:"1",
+  tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789:/#-"
+ });
+ return ocrWorker;
+}
+async function captureAndRead(){
+ if(ocrBusy)return;
+ const video=$("video");
+ if(!cameraStream||video.readyState<2||!video.videoWidth){
+  $("ocrStatus").textContent="La cámara todavía no está lista. Espera un momento.";return;
+ }
+ ocrBusy=true;$("captureButton").disabled=true;
+ try{
+  const canvas=$("captureCanvas"),ctx=canvas.getContext("2d");
+  // Aumentar la imagen antes del OCR para ayudar con letras pequeñas.
+  const scale=Math.min(2,1600/video.videoWidth);
+  canvas.width=Math.round(video.videoWidth*scale);
+  canvas.height=Math.round(video.videoHeight*scale);
+  ctx.drawImage(video,0,0,canvas.width,canvas.height);
+  const worker=await getOcrWorker();
+  $("ocrStatus").textContent="Analizando la etiqueta...";
+  const result=await worker.recognize(canvas);
+  const text=result.data.text||"";
+  $("ocrText").textContent=text||"El OCR no ha encontrado texto. Acerca la cámara y vuelve a intentarlo.";
+  const code=parseOcrText(text);
+  $("barcodeInput").value=text;
+  if(!code.pn&&!code.stock){
+   $("ocrStatus").textContent="No he podido localizar STOCK-ID ni P/N. Prueba con más luz, enfoque y la etiqueta completa.";
+   setStatus("OCR realizado, pero no se han reconocido los campos identificadores.");
+   return;
+  }
+  $("ocrStatus").textContent="Detectado: P/N "+(code.pn||"no reconocido")+" | STOCK-ID "+(code.stock||"no reconocido");
+  showCandidates(findCandidates(code),code);
+ }catch(error){
+  $("ocrStatus").textContent="Error OCR: "+error.message;console.error(error);
+ }finally{
+  ocrBusy=false;$("captureButton").disabled=false;
+ }
+}
+async function startCamera(){
+ try{
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error("El navegador no permite acceder a la cámara. Usa la página HTTPS en Chrome.");
+  cameraStream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}}});
+  const video=$("video");video.srcObject=cameraStream;video.classList.remove("hidden");
+  await video.play();
+  $("startCamera").classList.add("hidden");$("stopCamera").classList.remove("hidden");
+  $("torchButton").classList.remove("hidden");$("captureButton").classList.remove("hidden");$("captureButton").disabled=false;
+  $("ocrStatus").textContent="Cámara activa. Enfoca la etiqueta y pulsa «Leer etiqueta (OCR)».";
+ }catch(error){stopCamera();$("ocrStatus").textContent="No se ha podido abrir la cámara: "+error.message;console.error(error);}
+}
+function stopCamera(){
+ if(cameraStream){cameraStream.getTracks().forEach(track=>track.stop());cameraStream=null;}
+ const video=$("video");video.pause();video.srcObject=null;video.classList.add("hidden");
+ $("startCamera").classList.remove("hidden");$("stopCamera").classList.add("hidden");
+ $("torchButton").classList.add("hidden");$("captureButton").classList.add("hidden");
+ torchOn=false;$("torchButton").textContent="Encender linterna";
+}
+async function toggleTorch(){
+ if(!cameraStream)return;
+ const track=cameraStream.getVideoTracks()[0];if(!track)return;
+ try{
+  const capabilities=track.getCapabilities();
+  if(!capabilities.torch){$("ocrStatus").textContent="La cámara no permite controlar la linterna desde la página.";return;}
+  torchOn=!torchOn;await track.applyConstraints({advanced:[{torch:torchOn}]});
+  $("torchButton").textContent=torchOn?"Apagar linterna":"Encender linterna";
+ }catch(error){$("ocrStatus").textContent="No se ha podido cambiar la linterna: "+error.message;}
+}
+function getExportFileName(){
+ const now=new Date(),year=now.getFullYear(),month=String(now.getMonth()+1).padStart(2,"0"),day=String(now.getDate()).padStart(2,"0"),hours=String(now.getHours()).padStart(2,"0"),minutes=String(now.getMinutes()).padStart(2,"0");
+ return "INVENTARIO_ECONOCOM_"+year+"-"+month+"-"+day+"_"+hours+"-"+minutes+".xlsx";
+}
+async function exportExcel(){
+ if(!workbook||!inventorySheet){setStatus("Primero debes cargar un Excel.");return;}
+ try{
+  $("exportButton").disabled=true;setStatus("Preparando Excel actualizado...");
+  inventorySheet.getColumn(statusColumn).hidden=false;
+  for(let r=2;r<=inventorySheet.rowCount;r++){
+   const statusCell=inventorySheet.getRow(r).getCell(statusColumn);
+   if(normalize(cellText(statusCell))==="SI")paintStatusGreen(statusCell);
+  }
+  const buffer=await workbook.xlsx.writeBuffer();
+  const blob=new Blob([buffer],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  const url=URL.createObjectURL(blob),a=document.createElement("a");
+  a.href=url;a.download=getExportFileName();document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),5000);
+  setStatus("Excel descargado. Solo las letras SI aparecen en verde.",true);
+ }catch(error){setStatus("Error al exportar: "+error.message);console.error(error);}
+ finally{$("exportButton").disabled=false;}
 }
 
-// Buscar artículos.
-function findCandidates(raw) {
-  const code = parseBarcode(raw);
-
-  if (!code.pn && !code.stock) {
-    setStatus("El código no contiene P/N ni STOCK-ID reconocible.");
-    return [];
-  }
-
-  const candidates = [];
-
-  for (let r = 2; r <= inventorySheet.rowCount; r++) {
-    const row = inventorySheet.getRow(r);
-
-    const pnExcel = normalize(displayValue(row, columns.pn));
-    const stockExcel = normalize(displayValue(row, columns.stock));
-
-    const pnMatch = !!code.pn && pnExcel === code.pn;
-    const stockMatch = !!code.stock && stockExcel.includes(code.stock);
-
-    if (pnMatch || stockMatch) {
-      candidates.push({
-        rowNumber: r,
-        pnMatch,
-        stockMatch,
-        pn: displayValue(row, columns.pn),
-        stock: displayValue(row, columns.stock),
-        location: displayValue(row, columns.location),
-        description: displayValue(row, columns.description),
-        warehouse: displayValue(row, columns.warehouse)
-      });
-    }
-  }
-
-  candidates.sort((a, b) =>
-    (Number(b.pnMatch) + Number(b.stockMatch)) -
-    (Number(a.pnMatch) + Number(a.stockMatch))
-  );
-
-  return candidates;
-}
-
-// Mostrar resultados.
-function showCandidates(candidates, raw) {
-  const results = $("results");
-  results.innerHTML = "";
-
-  if (!candidates.length) {
-    const code = parseBarcode(raw);
-
-    setStatus("No se ha encontrado ningún artículo coincidente.");
-
-    const message = document.createElement("p");
-    message.textContent =
-      "P/N: " + (code.pn || "no indicado") +
-      " | STOCK-ID: " + (code.stock || "no indicado");
-
-    const addButton = document.createElement("button");
-    addButton.textContent = "Añadir a ENCONTRADO FUERA STOCK";
-    addButton.className = "green";
-    addButton.onclick = () => addOutsideStock(code);
-
-    results.append(message, addButton);
-    return;
-  }
-
-  setStatus("Se han encontrado " + candidates.length + " posible(s) artículo(s).");
-
-  candidates.forEach(candidate => {
-    const card = document.createElement("div");
-    card.className = "candidate";
-
-    const title = document.createElement("strong");
-    title.textContent = "Fila " + candidate.rowNumber;
-
-    const details = document.createElement("div");
-
-    const fields = [
-      ["P/N", candidate.pn],
-      ["STOCK-ID", candidate.stock],
-      ["Descripción", candidate.description],
-      ["Ubicación", candidate.location],
-      ["Almacén", candidate.warehouse]
-    ];
-
-    fields.forEach(([label, value]) => {
-      const p = document.createElement("p");
-      const b = document.createElement("strong");
-      b.textContent = label + ": ";
-      p.append(b, document.createTextNode(value || "—"));
-      details.appendChild(p);
-    });
-
-    const match = document.createElement("p");
-    match.className = "small";
-    match.textContent =
-      "Coincidencias: " +
-      (candidate.pnMatch ? "P/N " : "") +
-      (candidate.stockMatch ? "STOCK-ID" : "");
-
-    const confirm = document.createElement("button");
-    confirm.textContent = "Confirmar artículo";
-    confirm.className = "green";
-    confirm.onclick = () => confirmCandidate(candidate);
-
-    card.append(title, details, match, confirm);
-    results.appendChild(card);
-  });
-}
-
-// Confirmar artículo.
-function confirmCandidate(candidate) {
-  const row = inventorySheet.getRow(candidate.rowNumber);
-  const statusCell = row.getCell(statusColumn);
-
-  statusCell.value = "SI";
-  paintStatusGreen(statusCell);
-
-  setStatus(
-    "Artículo confirmado. Fila " + candidate.rowNumber +
-    " marcada en Columna1. Los artículos anteriores se conservan.",
-    true
-  );
-}
-
-// Añadir artículo fuera de stock.
-function addOutsideStock(code) {
-  let sheet = workbook.getWorksheet(OUT_SHEET);
-
-  if (!sheet) {
-    sheet = workbook.addWorksheet(OUT_SHEET);
-
-    const headers = [];
-    for (let c = 1; c <= lastInventoryColumn; c++) {
-      headers.push(inventorySheet.getRow(1).getCell(c).value);
-    }
-
-    sheet.addRow(headers);
-  }
-
-  const outColumns = detectHeaders(sheet);
-  const values = new Array(lastInventoryColumn).fill(null);
-
-  if (outColumns.pn) values[outColumns.pn - 1] = code.pn;
-  if (outColumns.stock) values[outColumns.stock - 1] = code.stock;
-  if (outColumns.description) {
-    values[outColumns.description - 1] = "ENCONTRADO FUERA STOCK";
-  }
-
-  const newRow = sheet.addRow(values);
-
-  for (let c = 1; c <= lastInventoryColumn; c++) {
-    newRow.getCell(c).fill = {
-      type: "pattern",
-      pattern: "solid",
-      fgColor: { argb: "FFFFE699" }
-    };
-  }
-
-  setStatus("Artículo añadido a ENCONTRADO FUERA STOCK.", true);
-  $("results").textContent =
-    "Registro añadido. Puedes seguir escaneando.";
-}
-
-// Buscar código.
-function searchCode(raw) {
-  if (!workbook || !inventorySheet) {
-    setStatus("Primero debes cargar el Excel.");
-    return;
-  }
-
-  const value = String(raw || "").trim();
-
-  if (!value) {
-    setStatus("Introduce o escanea un código.");
-    return;
-  }
-
-  $("barcodeInput").value = value;
-  showCandidates(findCandidates(value), value);
-}
-
-// Crear configuración de lectura para códigos lineales.
-function createReader() {
-  const ZX = window.ZXingBrowser;
-
-  const DecodeHintType =
-    ZX.DecodeHintType ||
-    (window.ZXing && window.ZXing.DecodeHintType);
-
-  const BarcodeFormat =
-    ZX.BarcodeFormat ||
-    (window.ZXing && window.ZXing.BarcodeFormat);
-
-  const hints = new Map();
-
-  // Pedir al lector que dedique más esfuerzo a reconocer el código.
-  if (DecodeHintType && DecodeHintType.TRY_HARDER) {
-    hints.set(DecodeHintType.TRY_HARDER, true);
-  }
-
-  // Priorizar formatos lineales habituales.
-  // Si la librería no expone BarcodeFormat, el lector conserva
-  // su configuración general y prueba todos los formatos.
-  if (DecodeHintType && DecodeHintType.POSSIBLE_FORMATS && BarcodeFormat) {
-    const formats = [
-      BarcodeFormat.CODE_39,
-      BarcodeFormat.CODE_128,
-      BarcodeFormat.CODE_93,
-      BarcodeFormat.ITF,
-      BarcodeFormat.CODABAR,
-      BarcodeFormat.EAN_13,
-      BarcodeFormat.EAN_8,
-      BarcodeFormat.UPC_A,
-      BarcodeFormat.UPC_E
-    ].filter(Boolean);
-
-    if (formats.length) {
-      hints.set(DecodeHintType.POSSIBLE_FORMATS, formats);
-    }
-  }
-
-  return new ZX.BrowserMultiFormatReader(hints, 250);
-}
-
-// Abrir cámara y leer códigos.
-async function startCamera() {
-  try {
-    if (!window.ZXingBrowser) {
-      throw new Error("No se ha podido cargar ZXing. Comprueba Internet.");
-    }
-
-    const Reader = window.ZXingBrowser.BrowserMultiFormatReader;
-
-    if (!Reader) {
-      throw new Error("No se encuentra BrowserMultiFormatReader.");
-    }
-
-    const video = $("video");
-    const reader = createReader();
-
-    video.classList.remove("hidden");
-    video.setAttribute("playsinline", "true");
-    video.setAttribute("autoplay", "true");
-    video.muted = true;
-
-    $("startCamera").classList.add("hidden");
-    $("stopCamera").classList.remove("hidden");
-    $("torchButton").classList.remove("hidden");
-
-    setStatus("Iniciando cámara trasera y lector de códigos...");
-
-    const callback = (result, error) => {
-      if (result) {
-        const text = result.getText();
-
-        setStatus("Código leído: " + text, true);
-
-        stopCamera();
-        searchCode(text);
-      }
-    };
-
-    // Solicitar cámara trasera y una resolución adecuada para
-    // distinguir las barras estrechas de las etiquetas.
-    const constraints = {
-      audio: false,
-      video: {
-        facingMode: { ideal: "environment" },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 }
-      }
-    };
-
-    if (typeof reader.decodeFromConstraints === "function") {
-      cameraControls = await reader.decodeFromConstraints(
-        constraints,
-        video,
-        callback
-      );
-    } else {
-      // Alternativa compatible si decodeFromConstraints no existe.
-      cameraControls = await reader.decodeFromVideoDevice(
-        undefined,
-        video,
-        callback
-      );
-    }
-
-    setStatus(
-      "Cámara activa. Acerca el código, enfoca las barras y mantenlo quieto."
-    );
-
-  } catch (error) {
-    stopCamera();
-    setStatus("Error al abrir la cámara o el lector: " + error.message);
-    console.error(error);
-  }
-}
-
-// Detener cámara.
-function stopCamera() {
-  if (cameraControls) {
-    try { cameraControls.stop(); } catch (e) {}
-    cameraControls = null;
-  }
-
-  const video = $("video");
-
-  if (video.srcObject) {
-    video.srcObject.getTracks().forEach(track => track.stop());
-    video.srcObject = null;
-  }
-
-  video.classList.add("hidden");
-  $("startCamera").classList.remove("hidden");
-  $("stopCamera").classList.add("hidden");
-  $("torchButton").classList.add("hidden");
-
-  torchOn = false;
-  $("torchButton").textContent = "Encender linterna";
-}
-
-// Linterna.
-async function toggleTorch() {
-  const stream = $("video").srcObject;
-
-  if (!stream) return;
-
-  const track = stream.getVideoTracks()[0];
-  if (!track) return;
-
-  try {
-    const capabilities = track.getCapabilities();
-
-    if (!capabilities.torch) {
-      setStatus("La cámara no permite controlar la linterna desde la página.");
-      return;
-    }
-
-    torchOn = !torchOn;
-
-    await track.applyConstraints({
-      advanced: [{ torch: torchOn }]
-    });
-
-    $("torchButton").textContent =
-      torchOn ? "Apagar linterna" : "Encender linterna";
-
-  } catch (error) {
-    setStatus("No se ha podido cambiar la linterna: " + error.message);
-  }
-}
-
-// Nombre del archivo con fecha y hora local.
-function getExportFileName() {
-  const now = new Date();
-
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  const hours = String(now.getHours()).padStart(2, "0");
-  const minutes = String(now.getMinutes()).padStart(2, "0");
-
-  return "INVENTARIO_ECONOCOM_" +
-    year + "-" + month + "-" + day +
-    "_" + hours + "-" + minutes + ".xlsx";
-}
-
-// Exportar Excel.
-async function exportExcel() {
-  if (!workbook || !inventorySheet) {
-    setStatus("Primero debes cargar un Excel.");
-    return;
-  }
-
-  try {
-    $("exportButton").disabled = true;
-    setStatus("Preparando Excel actualizado...");
-
-    inventorySheet.getColumn(statusColumn).hidden = false;
-
-    for (let r = 2; r <= inventorySheet.rowCount; r++) {
-      const row = inventorySheet.getRow(r);
-      const statusCell = row.getCell(statusColumn);
-
-      const marked = normalize(cellText(statusCell)) === "SI";
-
-      if (marked) {
-        paintStatusGreen(statusCell);
-      }
-    }
-
-    const buffer = await workbook.xlsx.writeBuffer();
-
-    const blob = new Blob(
-      [buffer],
-      {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-      }
-    );
-
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-
-    a.href = url;
-    a.download = getExportFileName();
-
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-
-    setStatus(
-      "Excel descargado. Solo las letras SI aparecen en verde.",
-      true
-    );
-
-  } catch (error) {
-    setStatus("Error al exportar: " + error.message);
-    console.error(error);
-
-  } finally {
-    $("exportButton").disabled = false;
-  }
-}
-
-// Eventos.
-$("excelFile").addEventListener("change", event => {
-  loadExcel(event.target.files[0]);
-});
-
-$("searchButton").addEventListener("click", () => {
-  searchCode($("barcodeInput").value);
-});
-
-$("barcodeInput").addEventListener("keydown", event => {
-  if (event.key === "Enter") {
-    searchCode($("barcodeInput").value);
-  }
-});
-
-$("startCamera").addEventListener("click", startCamera);
-$("stopCamera").addEventListener("click", stopCamera);
-$("torchButton").addEventListener("click", toggleTorch);
-$("exportButton").addEventListener("click", exportExcel);
-
+$("excelFile").addEventListener("change",event=>loadExcel(event.target.files[0]));
+$("searchButton").addEventListener("click",()=>searchCode($("barcodeInput").value));
+$("barcodeInput").addEventListener("keydown",event=>{if(event.key==="Enter")searchCode($("barcodeInput").value);});
+$("startCamera").addEventListener("click",startCamera);
+$("captureButton").addEventListener("click",captureAndRead);
+$("stopCamera").addEventListener("click",stopCamera);
+$("torchButton").addEventListener("click",toggleTorch);
+$("exportButton").addEventListener("click",exportExcel);
+window.addEventListener("pagehide",()=>{stopCamera();if(ocrWorker){ocrWorker.terminate();ocrWorker=null;}});
 })();
 </script>
-
 </body>
 </html>
