@@ -66,12 +66,12 @@ input{border:1px solid #bbb;background:white}
 <canvas id="captureCanvas" class="hidden"></canvas>
 
 <button id="startCamera" disabled>Abrir cámara</button>
-<button id="captureButton" class="green hidden" disabled>Leer STOCK-ID y P/N</button>
+<button id="captureButton" class="green hidden" disabled>Leer STOCK-ID, P/N y UBIC</button>
 <button id="stopCamera" class="secondary hidden">Detener cámara</button>
 <button id="torchButton" class="secondary hidden">Encender linterna</button>
 
 <p class="small">
-Coloca las dos líneas que contienen STOCK-ID y P/N dentro del marco verde.
+Coloca las líneas que contienen STOCK-ID, P/N y UBIC dentro del marco verde.
 Acerca la etiqueta hasta que las letras se vean nítidas.
 El OCR solo analizará el interior del marco.
 </p>
@@ -83,7 +83,7 @@ El OCR solo analizará el interior del marco.
 
 <div class="panel">
 <strong>3. Buscar manualmente</strong>
-<input id="barcodeInput" placeholder="Introduce P/N y/o STOCK-ID">
+<input id="barcodeInput" placeholder="P/N%STOCK-ID%UBIC">
 <button id="searchButton" disabled>Buscar en Excel</button>
 <div id="status">Primero carga el archivo Excel.</div>
 </div>
@@ -128,7 +128,6 @@ const STATUS_HEADER="COLUMNA1";
 const SECOND_STATUS_HEADER="COLUMNA2";
 const SHEET_NAME="GBS Inventario por Ubicacion";
 
-// Coordenadas del marco verde respecto al vídeo.
 const OCR_CROP={x:0.04,y:0.27,w:0.92,h:0.46};
 
 function normalize(value){
@@ -137,6 +136,14 @@ function normalize(value){
  .replace(/[\u0300-\u036f]/g,"")
  .toUpperCase()
  .replace(/[^A-Z0-9]/g,"");
+}
+
+// Conserva los guiones de P/N, STOCK-ID y UBIC.
+function cleanIdentifier(value){
+ return String(value||"")
+ .toUpperCase()
+ .replace(/\s/g,"")
+ .replace(/[^A-Z0-9-]/g,"");
 }
 
 function cellText(cell){
@@ -162,7 +169,7 @@ function displayValue(row,column){
  return column?cellText(row.getCell(column)):"";
 }
 
-// Lectura manual del formato *PN%STOCK.
+// Formato manual: P/N%STOCK-ID%UBIC.
 function parseBarcode(raw){
  const value=String(raw||"").trim().toUpperCase().replace(/\s/g,"");
  const clean=value.replace(/^\*+|\*+$/g,"");
@@ -170,12 +177,13 @@ function parseBarcode(raw){
 
  return {
   raw:value,
-  pn:(parts[0]||"").replace(/[^A-Z0-9]/g,""),
-  stock:(parts[1]||"").replace(/[^A-Z0-9]/g,"")
+  pn:cleanIdentifier(parts[0]||""),
+  stock:cleanIdentifier(parts[1]||""),
+  location:cleanIdentifier(parts[2]||"")
  };
 }
 
-// Busca exclusivamente valores asociados a STOCK-ID y P/N.
+// Extrae STOCK-ID, P/N y UBIC de las líneas OCR.
 function parseOcrText(text){
 
  const lines=String(text||"")
@@ -187,6 +195,7 @@ function parseOcrText(text){
 
  let pn="";
  let stock="";
+ let location="";
 
  for(const line of lines){
 
@@ -197,24 +206,35 @@ function parseOcrText(text){
     /STOCK\s*[-_ ]?\s*ID\s*[:#]?\s*([A-Z0-9][A-Z0-9-]{4,})/
    );
 
-   if(m)stock=normalize(m[1]);
+   if(m)stock=cleanIdentifier(m[1]);
   }
 
-  // Admite P/N, PN, P N y P\N.
+  // P/N, PN, P N y P\N.
   if(!pn && /P\s*[/\\]?\s*N/.test(line)){
 
    const m=line.match(
     /P\s*[/\\]?\s*N\s*[:#]?\s*([A-Z0-9][A-Z0-9-]{2,})/
    );
 
-   if(m)pn=normalize(m[1]);
+   if(m)pn=cleanIdentifier(m[1]);
+  }
+
+  // UBIC o UBICACION.
+  if(!location && /UBIC(?:ACION)?/.test(line)){
+
+   const m=line.match(
+    /UBIC(?:ACION)?\s*[:#]?\s*([A-Z0-9][A-Z0-9-]{1,})/
+   );
+
+   if(m)location=cleanIdentifier(m[1]);
   }
  }
 
  return {
   raw:lines.join("\n"),
   pn,
-  stock
+  stock,
+  location
  };
 }
 
@@ -447,7 +467,8 @@ function showCandidates(candidates,raw){
   const message=document.createElement("p");
   message.textContent=
    "P/N: "+(code.pn||"no reconocido")+
-   " | STOCK-ID: "+(code.stock||"no reconocido");
+   " | STOCK-ID: "+(code.stock||"no reconocido")+
+   " | UBIC: "+(code.location||"no reconocida");
 
   const addButton=document.createElement("button");
   addButton.textContent="Añadir a ENCONTRADO FUERA STOCK";
@@ -538,11 +559,24 @@ function addOutsideStock(code){
  const outColumns=detectHeaders(sheet);
  const values=new Array(lastInventoryColumn).fill(null);
 
- if(outColumns.pn)values[outColumns.pn-1]=code.pn||"";
- if(outColumns.stock)values[outColumns.stock-1]=code.stock||"";
+ // Columna B: ubicación.
+ if(outColumns.location){
+  values[outColumns.location-1]=code.location||"";
+ }
 
+ // Columna C: P/N.
+ if(outColumns.pn){
+  values[outColumns.pn-1]=code.pn||"";
+ }
+
+ // Columna D: descripción.
  if(outColumns.description){
   values[outColumns.description-1]="ENCONTRADO FUERA STOCK";
+ }
+
+ // Columna E: STOCK-ID.
+ if(outColumns.stock){
+  values[outColumns.stock-1]=code.stock||"";
  }
 
  const newRow=sheet.addRow(values);
@@ -555,7 +589,7 @@ function addOutsideStock(code){
   };
  }
 
- setStatus("Artículo añadido a ENCONTRADO FUERA STOCK.",true);
+ setStatus("Artículo añadido a ENCONTRADO FUERA STOCK con P/N, STOCK-ID y UBIC.",true);
  $("results").textContent="Registro añadido. Puedes seguir leyendo etiquetas.";
 }
 
@@ -577,7 +611,6 @@ function searchCode(raw){
  showCandidates(findCandidates(value),value);
 }
 
-// Inicializa Tesseract una sola vez.
 async function getOcrWorker(){
 
  if(ocrWorker)return ocrWorker;
@@ -598,7 +631,7 @@ async function getOcrWorker(){
     $("ocrStatus").textContent="Descargando idioma de reconocimiento...";
    }
    else if(m.status==="recognizing text"){
-    $("ocrStatus").textContent="Reconociendo STOCK-ID y P/N...";
+    $("ocrStatus").textContent="Reconociendo STOCK-ID, P/N y UBIC...";
    }
   }
  });
@@ -612,7 +645,6 @@ async function getOcrWorker(){
  return ocrWorker;
 }
 
-// Recorta exactamente la zona que coincide con el marco verde.
 function makeOcrCrop(video,canvas){
 
  const sx=Math.round(video.videoWidth*OCR_CROP.x);
@@ -639,7 +671,6 @@ function makeOcrCrop(video,canvas){
  const image=ctx.getImageData(0,0,canvas.width,canvas.height);
  const d=image.data;
 
- // Escala de grises y contraste moderado.
  for(let i=0;i<d.length;i+=4){
 
   const gray=
@@ -690,14 +721,14 @@ async function captureAndRead(){
 
   const code=parseOcrText(text);
 
-  // El campo manual se rellena solo con los identificadores extraídos.
+  // Conserva los tres datos para la búsqueda y el alta fuera de stock.
   $("barcodeInput").value=
-   (code.pn||"")+"%"+(code.stock||"");
+   (code.pn||"")+"%"+(code.stock||"")+"%"+(code.location||"");
 
   if(!code.pn&&!code.stock){
 
    $("ocrStatus").textContent=
-    "No he localizado P/N o STOCK-ID dentro del marco. Comprueba que las dos líneas estén dentro del rectángulo y enfocadas.";
+    "No he localizado P/N o STOCK-ID dentro del marco. Comprueba que las líneas estén dentro del rectángulo y enfocadas.";
 
    setStatus("OCR realizado, pero no se han reconocido los campos identificadores.");
    return;
@@ -705,7 +736,8 @@ async function captureAndRead(){
 
   $("ocrStatus").textContent=
    "Detectado: P/N "+(code.pn||"no reconocido")+
-   " | STOCK-ID "+(code.stock||"no reconocido");
+   " | STOCK-ID "+(code.stock||"no reconocido")+
+   " | UBIC "+(code.location||"no reconocida");
 
   showCandidates(findCandidates(code),code);
 
@@ -745,7 +777,6 @@ async function startCamera(){
 
   await video.play();
 
-  // Enfoque continuo cuando el dispositivo lo permite.
   try{
 
    const track=cameraStream.getVideoTracks()[0];
@@ -757,9 +788,7 @@ async function startCamera(){
     });
    }
 
-  }catch(e){
-   // Algunos móviles no permiten controlar el enfoque desde la web.
-  }
+  }catch(e){}
 
   $("startCamera").classList.add("hidden");
   $("stopCamera").classList.remove("hidden");
@@ -768,7 +797,7 @@ async function startCamera(){
   $("captureButton").disabled=false;
 
   $("ocrStatus").textContent=
-   "Cámara activa. Coloca STOCK-ID y P/N dentro del marco verde.";
+   "Cámara activa. Coloca STOCK-ID, P/N y UBIC dentro del marco verde.";
 
  }catch(error){
 
