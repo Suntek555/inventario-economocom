@@ -108,8 +108,9 @@ input { border: 1px solid #bbb; background: white; }
 <div class="panel">
   <strong>5. Guardar inventario actualizado</strong>
   <p class="small">
-    La columna Columna1 mostrará SI en los artículos inventariados.
-    Solo la celda marcada aparecerá en verde.
+    Se escribirá SI en Columna1 para cada artículo confirmado.
+    Solo las letras SI aparecerán en verde y negrita.
+    No se coloreará el fondo de las celdas ni las filas.
     La descarga incluirá fecha y hora en el nombre del archivo.
   </p>
   <button id="exportButton" class="green" disabled>
@@ -137,9 +138,9 @@ let lastInventoryColumn = 0;
 const OUT_SHEET = "ENCONTRADO FUERA STOCK";
 const STATUS_HEADER = "COLUMNA1";
 const SECOND_STATUS_HEADER = "COLUMNA2";
-const GREEN = "FF92D050";
 const SHEET_NAME = "GBS Inventario por Ubicacion";
 
+// Normalizar encabezados y códigos.
 function normalize(value) {
   return String(value ?? "")
     .normalize("NFD")
@@ -187,7 +188,7 @@ function displayValue(row, column) {
   return cellText(row.getCell(column));
 }
 
-// Detectar las columnas de datos por encabezado.
+// Detectar columnas de datos.
 function detectHeaders(sheet) {
   const found = {};
 
@@ -226,33 +227,22 @@ function checkColumns() {
   }
 }
 
-function isOurGreen(cell) {
-  const fill = cell.fill;
-
-  if (!fill || !fill.fgColor) return false;
-
-  const color = String(fill.fgColor.argb || "").toUpperCase();
-  return color === GREEN;
-}
-
-function removeOurGreen(cell) {
-  if (isOurGreen(cell)) {
-    cell.fill = {
-      type: "pattern",
-      pattern: "none"
-    };
-  }
-}
-
+// Poner únicamente el texto SI en verde y negrita.
+// No se modifica el relleno ni el fondo de la celda.
 function paintStatusGreen(cell) {
-  cell.fill = {
-    type: "pattern",
-    pattern: "solid",
-    fgColor: { argb: GREEN }
+  cell.font = {
+    ...(cell.font || {}),
+    color: { argb: "FF008000" },
+    bold: true
   };
 }
 
-// Localizar Columna1 y Columna2 sin fijar una posición concreta.
+// No se modifica el formato de las celdas sin SI.
+function removeOurGreen(cell) {
+  // No modificar formato ni fondo.
+}
+
+// Localizar Columna1 y Columna2 por sus encabezados.
 function prepareStatusColumn(sheet) {
   const header = sheet.getRow(1);
   let foundColumn = 0;
@@ -296,10 +286,10 @@ function prepareStatusColumn(sheet) {
   firstInventoryColumn = 1;
   lastInventoryColumn = statusColumn - 1;
 
-  // Mostrar Columna1. No modificar Columna2.
+  // Mostrar Columna1 sin modificar Columna2.
   sheet.getColumn(statusColumn).hidden = false;
 
-  // Restaurar las marcas según los SI guardados.
+  // Aplicar texto verde solo a las celdas que ya contienen SI.
   for (let r = 2; r <= sheet.rowCount; r++) {
     const row = sheet.getRow(r);
     const statusCell = row.getCell(statusColumn);
@@ -307,8 +297,6 @@ function prepareStatusColumn(sheet) {
 
     if (marked) {
       paintStatusGreen(statusCell);
-    } else {
-      removeOurGreen(statusCell);
     }
   }
 }
@@ -658,7 +646,7 @@ async function toggleTorch() {
   }
 }
 
-// Nombre de archivo con fecha y hora local.
+// Nombre del archivo con fecha y hora local.
 function getExportFileName() {
   const now = new Date();
 
@@ -684,10 +672,9 @@ async function exportExcel() {
     $("exportButton").disabled = true;
     setStatus("Preparando Excel actualizado...");
 
-    // Mantener visible Columna1.
     inventorySheet.getColumn(statusColumn).hidden = false;
 
-    // Revisar todos los SI y colorear solo la celda de control.
+    // Aplicar verde únicamente a las letras SI.
     for (let r = 2; r <= inventorySheet.rowCount; r++) {
       const row = inventorySheet.getRow(r);
       const statusCell = row.getCell(statusColumn);
@@ -696,8 +683,6 @@ async function exportExcel() {
 
       if (marked) {
         paintStatusGreen(statusCell);
-      } else {
-        removeOurGreen(statusCell);
       }
     }
 
@@ -723,7 +708,7 @@ async function exportExcel() {
     setTimeout(() => URL.revokeObjectURL(url), 5000);
 
     setStatus(
-      "Excel descargado. Columna1 visible y marcas SI en verde.",
+      "Excel descargado. Solo las letras SI aparecen en verde.",
       true
     );
 
