@@ -71,7 +71,7 @@ input{border:1px solid #bbb;background:white}
 <button id="torchButton" class="secondary hidden">Encender linterna</button>
 
 <p class="small">
-Coloca las líneas que contienen STOCK-ID, P/N y UBIC dentro del marco verde.
+Coloca las líneas que contienen STOCK-ID, P/N, UBIC y TM/MOD dentro del marco verde.
 Acerca la etiqueta hasta que las letras se vean nítidas.
 El OCR solo analizará el interior del marco.
 </p>
@@ -177,10 +177,15 @@ function parseBarcode(raw){
   raw:value,
   pn:cleanIdentifier(parts[0]||""),
   stock:cleanIdentifier(parts[1]||""),
-  location:cleanIdentifier(parts[2]||"")
+  location:cleanIdentifier(parts[2]||""),
+  tmMod:"",
+  manufacturer:"",
+  other:"",
+  otherFields:[]
  };
 }
 
+// Extrae los campos identificados y conserva las demás líneas OCR.
 function parseOcrText(text){
 
  const lines=String(text||"")
@@ -193,42 +198,86 @@ function parseOcrText(text){
  let pn="";
  let stock="";
  let location="";
+ let tmMod="";
+ let manufacturer="";
 
- for(const line of lines){
+ const usedLines=new Set();
+
+ for(let i=0;i<lines.length;i++){
+
+  const line=lines[i];
 
   if(!stock && /STOCK\s*[-_ ]?\s*ID/.test(line)){
-
    const m=line.match(
     /STOCK\s*[-_ ]?\s*ID\s*[:#]?\s*([A-Z0-9][A-Z0-9-]{4,})/
    );
 
-   if(m)stock=cleanIdentifier(m[1]);
+   if(m){
+    stock=cleanIdentifier(m[1]);
+    usedLines.add(i);
+   }
   }
 
   if(!pn && /P\s*[/\\]?\s*N/.test(line)){
-
    const m=line.match(
     /P\s*[/\\]?\s*N\s*[:#]?\s*([A-Z0-9][A-Z0-9-]{2,})/
    );
 
-   if(m)pn=cleanIdentifier(m[1]);
+   if(m){
+    pn=cleanIdentifier(m[1]);
+    usedLines.add(i);
+   }
   }
 
   if(!location && /UBIC(?:ACION)?/.test(line)){
-
    const m=line.match(
     /UBIC(?:ACION)?\s*[:#]?\s*([A-Z0-9][A-Z0-9-]{1,})/
    );
 
-   if(m)location=cleanIdentifier(m[1]);
+   if(m){
+    location=cleanIdentifier(m[1]);
+    usedLines.add(i);
+   }
+  }
+
+  if(!tmMod && /TM\s*[/\\]\s*MOD/.test(line)){
+
+   const m=line.match(/TM\s*[/\\]\s*MOD\s*[:#]?\s*(.+)$/);
+
+   if(m && m[1].trim()){
+    tmMod=m[1].trim();
+    usedLines.add(i);
+   }else if(
+    lines[i+1] &&
+    !/STOCK|P\s*[/\\]?\s*N|UBIC|TM\s*[/\\]\s*MOD/.test(lines[i+1])
+   ){
+    tmMod=lines[i+1];
+    usedLines.add(i);
+    usedLines.add(i+1);
+   }
+  }
+
+  if(!manufacturer &&
+   (/ECONOCOM/.test(line)||/FABRICANTE|MANUFACTURER/.test(line))){
+
+   manufacturer=line;
+   usedLines.add(i);
   }
  }
+
+ const otherLines=lines.filter((line,index)=>
+  !usedLines.has(index)
+ );
 
  return {
   raw:lines.join("\n"),
   pn,
   stock,
-  location
+  location,
+  tmMod,
+  manufacturer,
+  other:otherLines.join(" | "),
+  otherFields:[]
  };
 }
 
@@ -462,7 +511,8 @@ function showCandidates(candidates,raw){
   message.textContent=
    "P/N: "+(code.pn||"no reconocido")+
    " | STOCK-ID: "+(code.stock||"no reconocido")+
-   " | UBIC: "+(code.location||"no reconocida");
+   " | UBIC: "+(code.location||"no reconocida")+
+   " | TM/MOD: "+(code.tmMod||"no reconocido");
 
   const addButton=document.createElement("button");
   addButton.textContent="Añadir a ENCONTRADO FUERA STOCK";
@@ -534,6 +584,7 @@ function confirmCandidate(candidate){
  );
 }
 
+// Añade los datos principales y todos los datos OCR adicionales.
 function addOutsideStock(code){
 
  let sheet=workbook.getWorksheet(OUT_SHEET);
@@ -541,6 +592,7 @@ function addOutsideStock(code){
  if(!sheet){
 
   sheet=workbook.addWorksheet(OUT_SHEET);
+
   const headers=[];
 
   for(let c=1;c<=lastInventoryColumn;c++){
@@ -551,8 +603,41 @@ function addOutsideStock(code){
  }
 
  const outColumns=detectHeaders(sheet);
- const values=new Array(lastInventoryColumn).fill(null);
 
+ // Crea columnas adicionales si todavía no existen.
+ function ensureExtraColumn(headerName){
+
+  const wanted=normalize(headerName);
+  const header=sheet.getRow(1);
+
+  for(let c=1;c<=header.cellCount;c++){
+   if(normalize(cellText(header.getCell(c)))===wanted){
+    return c;
+   }
+  }
+
+  const newColumn=header.cellCount+1;
+  header.getCell(newColumn).value=headerName;
+
+  return newColumn;
+ }
+
+ const tmColumn=ensureExtraColumn("TM/MOD");
+ const manufacturerColumn=ensureExtraColumn("Fabricante / Empresa");
+ const otherColumn=ensureExtraColumn("Otros datos etiqueta");
+ const rawColumn=ensureExtraColumn("Texto OCR completo");
+
+ const totalColumns=Math.max(
+  lastInventoryColumn,
+  tmColumn,
+  manufacturerColumn,
+  otherColumn,
+  rawColumn
+ );
+
+ const values=new Array(totalColumns).fill(null);
+
+ // Columnas originales.
  if(outColumns.location){
   values[outColumns.location-1]=code.location||"";
  }
@@ -569,9 +654,16 @@ function addOutsideStock(code){
   values[outColumns.stock-1]=code.stock||"";
  }
 
+ // Datos adicionales de la etiqueta.
+ values[tmColumn-1]=code.tmMod||"";
+ values[manufacturerColumn-1]=code.manufacturer||"";
+ values[otherColumn-1]=code.other||"";
+ values[rawColumn-1]=code.raw||"";
+
  const newRow=sheet.addRow(values);
 
- for(let c=1;c<=lastInventoryColumn;c++){
+ // Mantener el color amarillo de los registros fuera de stock.
+ for(let c=1;c<=totalColumns;c++){
   newRow.getCell(c).fill={
    type:"pattern",
    pattern:"solid",
@@ -579,8 +671,13 @@ function addOutsideStock(code){
   };
  }
 
- setStatus("Artículo añadido a ENCONTRADO FUERA STOCK con P/N, STOCK-ID y UBIC.",true);
- $("results").textContent="Registro añadido. Puedes seguir leyendo etiquetas.";
+ setStatus(
+  "Artículo añadido a ENCONTRADO FUERA STOCK con los datos reconocidos de la etiqueta.",
+  true
+ );
+
+ $("results").textContent=
+  "Registro añadido. Se han guardado P/N, STOCK-ID, UBIC y los datos adicionales reconocidos.";
 }
 
 function searchCode(raw){
@@ -621,7 +718,7 @@ async function getOcrWorker(){
     $("ocrStatus").textContent="Descargando idioma de reconocimiento...";
    }
    else if(m.status==="recognizing text"){
-    $("ocrStatus").textContent="Reconociendo STOCK-ID, P/N y UBIC...";
+    $("ocrStatus").textContent="Reconociendo STOCK-ID, P/N, UBIC y otros datos...";
    }
   }
  });
@@ -679,7 +776,6 @@ function makeOcrCrop(video,canvas){
  ctx.putImageData(image,0,0);
 }
 
-// NUEVA FUNCIÓN: limpia los campos antes de cada lectura.
 async function captureAndRead(){
 
  if(ocrBusy)return;
@@ -691,7 +787,7 @@ async function captureAndRead(){
   return;
  }
 
- // Limpiar toda la información de la etiqueta anterior.
+ // Limpiar los datos de la lectura anterior.
  $("ocrText").textContent="Leyendo nueva etiqueta...";
  $("barcodeInput").value="";
  $("results").textContent="Procesando nueva etiqueta...";
@@ -709,7 +805,7 @@ async function captureAndRead(){
 
   const worker=await getOcrWorker();
 
-  $("ocrStatus").textContent="Leyendo los campos dentro del marco verde...";
+  $("ocrStatus").textContent="Leyendo todos los datos dentro del marco verde...";
 
   const result=await worker.recognize(canvas);
   const text=result.data.text||"";
@@ -721,7 +817,9 @@ async function captureAndRead(){
 
   // Solo se introducen los datos de la etiqueta actual.
   $("barcodeInput").value=
-   (code.pn||"")+"%"+(code.stock||"")+"%"+(code.location||"");
+   (code.pn||"")+"%"+
+   (code.stock||"")+"%"+
+   (code.location||"");
 
   if(!code.pn&&!code.stock){
 
@@ -736,7 +834,8 @@ async function captureAndRead(){
   $("ocrStatus").textContent=
    "Detectado: P/N "+(code.pn||"no reconocido")+
    " | STOCK-ID "+(code.stock||"no reconocido")+
-   " | UBIC "+(code.location||"no reconocida");
+   " | UBIC "+(code.location||"no reconocida")+
+   " | TM/MOD "+(code.tmMod||"no reconocido");
 
   showCandidates(findCandidates(code),code);
 
@@ -800,7 +899,7 @@ async function startCamera(){
   $("captureButton").disabled=false;
 
   $("ocrStatus").textContent=
-   "Cámara activa. Coloca STOCK-ID, P/N y UBIC dentro del marco verde.";
+   "Cámara activa. Coloca STOCK-ID, P/N, UBIC y TM/MOD dentro del marco verde.";
 
  }catch(error){
 
@@ -810,7 +909,8 @@ async function startCamera(){
    "No se ha podido abrir la cámara: "+error.message;
 
   console.error(error);
- }
+}
+
 }
 
 function stopCamera(){
