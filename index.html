@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -90,7 +89,10 @@ input { border: 1px solid #bbb; background: white; }
   <button id="startCamera" disabled>Abrir cámara</button>
   <button id="stopCamera" class="secondary hidden">Detener cámara</button>
   <button id="torchButton" class="secondary hidden">Encender linterna</button>
-  <p class="small">Si la linterna no funciona, utiliza iluminación ambiental.</p>
+  <p class="small">
+    Enfoca el código de barras con buena iluminación.
+    Si la linterna no funciona, utiliza iluminación ambiental.
+  </p>
 </div>
 
 <div class="panel">
@@ -228,7 +230,6 @@ function checkColumns() {
 }
 
 // Poner únicamente el texto SI en verde y negrita.
-// No se modifica el relleno ni el fondo de la celda.
 function paintStatusGreen(cell) {
   cell.font = {
     ...(cell.font || {}),
@@ -286,10 +287,8 @@ function prepareStatusColumn(sheet) {
   firstInventoryColumn = 1;
   lastInventoryColumn = statusColumn - 1;
 
-  // Mostrar Columna1 sin modificar Columna2.
   sheet.getColumn(statusColumn).hidden = false;
 
-  // Aplicar texto verde solo a las celdas que ya contienen SI.
   for (let r = 2; r <= sheet.rowCount; r++) {
     const row = sheet.getRow(r);
     const statusCell = row.getCell(statusColumn);
@@ -548,46 +547,120 @@ function searchCode(raw) {
   showCandidates(findCandidates(value), value);
 }
 
-// Abrir cámara.
+// Crear configuración de lectura para códigos lineales.
+function createReader() {
+  const ZX = window.ZXingBrowser;
+
+  const DecodeHintType =
+    ZX.DecodeHintType ||
+    (window.ZXing && window.ZXing.DecodeHintType);
+
+  const BarcodeFormat =
+    ZX.BarcodeFormat ||
+    (window.ZXing && window.ZXing.BarcodeFormat);
+
+  const hints = new Map();
+
+  // Pedir al lector que dedique más esfuerzo a reconocer el código.
+  if (DecodeHintType && DecodeHintType.TRY_HARDER) {
+    hints.set(DecodeHintType.TRY_HARDER, true);
+  }
+
+  // Priorizar formatos lineales habituales.
+  // Si la librería no expone BarcodeFormat, el lector conserva
+  // su configuración general y prueba todos los formatos.
+  if (DecodeHintType && DecodeHintType.POSSIBLE_FORMATS && BarcodeFormat) {
+    const formats = [
+      BarcodeFormat.CODE_39,
+      BarcodeFormat.CODE_128,
+      BarcodeFormat.CODE_93,
+      BarcodeFormat.ITF,
+      BarcodeFormat.CODABAR,
+      BarcodeFormat.EAN_13,
+      BarcodeFormat.EAN_8,
+      BarcodeFormat.UPC_A,
+      BarcodeFormat.UPC_E
+    ].filter(Boolean);
+
+    if (formats.length) {
+      hints.set(DecodeHintType.POSSIBLE_FORMATS, formats);
+    }
+  }
+
+  return new ZX.BrowserMultiFormatReader(hints, 250);
+}
+
+// Abrir cámara y leer códigos.
 async function startCamera() {
   try {
     if (!window.ZXingBrowser) {
-      throw new Error("No se ha podido cargar el lector. Comprueba Internet.");
+      throw new Error("No se ha podido cargar ZXing. Comprueba Internet.");
     }
 
     const Reader = window.ZXingBrowser.BrowserMultiFormatReader;
 
     if (!Reader) {
-      throw new Error("No se encuentra el lector de códigos.");
+      throw new Error("No se encuentra BrowserMultiFormatReader.");
     }
 
     const video = $("video");
-    const reader = new Reader();
+    const reader = createReader();
 
     video.classList.remove("hidden");
+    video.setAttribute("playsinline", "true");
+    video.setAttribute("autoplay", "true");
+    video.muted = true;
+
     $("startCamera").classList.add("hidden");
     $("stopCamera").classList.remove("hidden");
     $("torchButton").classList.remove("hidden");
 
-    setStatus("Iniciando cámara...");
+    setStatus("Iniciando cámara trasera y lector de códigos...");
 
-    cameraControls = await reader.decodeFromVideoDevice(
-      undefined,
-      video,
-      (result, error) => {
-        if (result) {
-          const text = result.getText();
-          stopCamera();
-          searchCode(text);
-        }
+    const callback = (result, error) => {
+      if (result) {
+        const text = result.getText();
+
+        setStatus("Código leído: " + text, true);
+
+        stopCamera();
+        searchCode(text);
       }
-    );
+    };
 
-    setStatus("Cámara activa. Enfoca el código de barras.");
+    // Solicitar cámara trasera y una resolución adecuada para
+    // distinguir las barras estrechas de las etiquetas.
+    const constraints = {
+      audio: false,
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
+      }
+    };
+
+    if (typeof reader.decodeFromConstraints === "function") {
+      cameraControls = await reader.decodeFromConstraints(
+        constraints,
+        video,
+        callback
+      );
+    } else {
+      // Alternativa compatible si decodeFromConstraints no existe.
+      cameraControls = await reader.decodeFromVideoDevice(
+        undefined,
+        video,
+        callback
+      );
+    }
+
+    setStatus(
+      "Cámara activa. Acerca el código, enfoca las barras y mantenlo quieto."
+    );
 
   } catch (error) {
     stopCamera();
-    setStatus("Error al abrir la cámara: " + error.message);
+    setStatus("Error al abrir la cámara o el lector: " + error.message);
     console.error(error);
   }
 }
@@ -674,7 +747,6 @@ async function exportExcel() {
 
     inventorySheet.getColumn(statusColumn).hidden = false;
 
-    // Aplicar verde únicamente a las letras SI.
     for (let r = 2; r <= inventorySheet.rowCount; r++) {
       const row = inventorySheet.getRow(r);
       const statusCell = row.getCell(statusColumn);
