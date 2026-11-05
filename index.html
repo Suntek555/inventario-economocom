@@ -138,7 +138,6 @@ function normalize(value){
  .replace(/[^A-Z0-9]/g,"");
 }
 
-// Conserva los guiones de P/N, STOCK-ID y UBIC.
 function cleanIdentifier(value){
  return String(value||"")
  .toUpperCase()
@@ -169,7 +168,6 @@ function displayValue(row,column){
  return column?cellText(row.getCell(column)):"";
 }
 
-// Formato manual: P/N%STOCK-ID%UBIC.
 function parseBarcode(raw){
  const value=String(raw||"").trim().toUpperCase().replace(/\s/g,"");
  const clean=value.replace(/^\*+|\*+$/g,"");
@@ -183,7 +181,6 @@ function parseBarcode(raw){
  };
 }
 
-// Extrae STOCK-ID, P/N y UBIC de las líneas OCR.
 function parseOcrText(text){
 
  const lines=String(text||"")
@@ -199,7 +196,6 @@ function parseOcrText(text){
 
  for(const line of lines){
 
-  // STOCK-ID
   if(!stock && /STOCK\s*[-_ ]?\s*ID/.test(line)){
 
    const m=line.match(
@@ -209,7 +205,6 @@ function parseOcrText(text){
    if(m)stock=cleanIdentifier(m[1]);
   }
 
-  // P/N, PN, P N y P\N.
   if(!pn && /P\s*[/\\]?\s*N/.test(line)){
 
    const m=line.match(
@@ -219,7 +214,6 @@ function parseOcrText(text){
    if(m)pn=cleanIdentifier(m[1]);
   }
 
-  // UBIC o UBICACION.
   if(!location && /UBIC(?:ACION)?/.test(line)){
 
    const m=line.match(
@@ -559,22 +553,18 @@ function addOutsideStock(code){
  const outColumns=detectHeaders(sheet);
  const values=new Array(lastInventoryColumn).fill(null);
 
- // Columna B: ubicación.
  if(outColumns.location){
   values[outColumns.location-1]=code.location||"";
  }
 
- // Columna C: P/N.
  if(outColumns.pn){
   values[outColumns.pn-1]=code.pn||"";
  }
 
- // Columna D: descripción.
  if(outColumns.description){
   values[outColumns.description-1]="ENCONTRADO FUERA STOCK";
  }
 
- // Columna E: STOCK-ID.
  if(outColumns.stock){
   values[outColumns.stock-1]=code.stock||"";
  }
@@ -689,6 +679,7 @@ function makeOcrCrop(video,canvas){
  ctx.putImageData(image,0,0);
 }
 
+// NUEVA FUNCIÓN: limpia los campos antes de cada lectura.
 async function captureAndRead(){
 
  if(ocrBusy)return;
@@ -699,6 +690,13 @@ async function captureAndRead(){
   $("ocrStatus").textContent="La cámara todavía no está lista. Espera un momento.";
   return;
  }
+
+ // Limpiar toda la información de la etiqueta anterior.
+ $("ocrText").textContent="Leyendo nueva etiqueta...";
+ $("barcodeInput").value="";
+ $("results").textContent="Procesando nueva etiqueta...";
+ $("ocrStatus").textContent="Preparando nueva lectura...";
+ setStatus("Leyendo una nueva etiqueta...");
 
  ocrBusy=true;
  $("captureButton").disabled=true;
@@ -721,7 +719,7 @@ async function captureAndRead(){
 
   const code=parseOcrText(text);
 
-  // Conserva los tres datos para la búsqueda y el alta fuera de stock.
+  // Solo se introducen los datos de la etiqueta actual.
   $("barcodeInput").value=
    (code.pn||"")+"%"+(code.stock||"")+"%"+(code.location||"");
 
@@ -731,6 +729,7 @@ async function captureAndRead(){
     "No he localizado P/N o STOCK-ID dentro del marco. Comprueba que las líneas estén dentro del rectángulo y enfocadas.";
 
    setStatus("OCR realizado, pero no se han reconocido los campos identificadores.");
+   $("results").textContent="No se han reconocido identificadores en esta etiqueta.";
    return;
   }
 
@@ -744,6 +743,10 @@ async function captureAndRead(){
  }catch(error){
 
   $("ocrStatus").textContent="Error OCR: "+error.message;
+  $("ocrText").textContent="Error durante la lectura.";
+  $("barcodeInput").value="";
+  $("results").textContent="No se ha podido procesar la etiqueta.";
+  setStatus("Error al leer la etiqueta.");
   console.error(error);
 
  }finally{
